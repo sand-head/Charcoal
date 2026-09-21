@@ -2,15 +2,23 @@ using SlopTui.Rendering;
 
 namespace SlopTui.Layout;
 
-public enum Display { Flex, None }
+public enum Display { Flex, Grid, None }
 public enum FlexDirection { Row, Column, RowReverse, ColumnReverse }
+public enum FlexWrap { NoWrap, Wrap, WrapReverse }
 public enum JustifyContent { FlexStart, Center, FlexEnd, SpaceBetween, SpaceAround, SpaceEvenly }
 public enum AlignItems { Stretch, FlexStart, Center, FlexEnd }
+
+/// <summary>How the lines of a wrapped flex container, or the tracks of a grid, share leftover cross space.</summary>
+public enum AlignContent { Stretch, FlexStart, Center, FlexEnd, SpaceBetween, SpaceAround }
 
 /// <summary><see cref="AlignItems"/> for one item, or <see cref="Auto"/> to take the container's.</summary>
 public enum AlignSelf { Auto, Stretch, FlexStart, Center, FlexEnd }
 
-public enum Overflow { Hidden, Visible }
+/// <summary>
+/// What a box does with content larger than itself. As in CSS, only a
+/// <see cref="Visible"/> box keeps its content's size as its minimum.
+/// </summary>
+public enum Overflow { Visible, Hidden, Scroll }
 public enum Position { Relative, Absolute }
 public enum BorderStyle { None, Single, Double, Round, Bold, Classic }
 
@@ -27,6 +35,26 @@ public enum TextWrap
     TruncateMiddle,
     /// <summary>One line per source line, clipped by the box with no marker.</summary>
     Clip,
+}
+
+/// <summary>What kind of value a grid <see cref="Track"/> holds.</summary>
+public enum TrackUnit { Auto, Cells, Percent, Fraction }
+
+/// <summary>A grid track: cells, a percentage, a fraction (<c>fr</c>) of the rest, or auto.</summary>
+public readonly record struct Track(TrackUnit Unit, double Value)
+{
+    public static readonly Track Auto = new(TrackUnit.Auto, 0);
+    public static Track Cells(int cells) => new(TrackUnit.Cells, cells);
+    public static Track Percent(double percent) => new(TrackUnit.Percent, percent);
+    public static Track Fr(double fraction) => new(TrackUnit.Fraction, fraction);
+
+    public override string ToString() => Unit switch
+    {
+        TrackUnit.Cells => ((int)Value).ToString(),
+        TrackUnit.Percent => Value + "%",
+        TrackUnit.Fraction => Value + "fr",
+        _ => "auto",
+    };
 }
 
 /// <summary>What kind of value a <see cref="Length"/> holds.</summary>
@@ -70,9 +98,14 @@ public sealed record Style
     public Display Display { get; init; } = Display.Flex;
     public Position Position { get; init; } = Position.Relative;
     public FlexDirection FlexDirection { get; init; } = FlexDirection.Row;
+    public FlexWrap FlexWrap { get; init; } = FlexWrap.NoWrap;
     public JustifyContent JustifyContent { get; init; } = JustifyContent.FlexStart;
     public AlignItems AlignItems { get; init; } = AlignItems.Stretch;
+    public AlignContent AlignContent { get; init; } = AlignContent.Stretch;
     public AlignSelf AlignSelf { get; init; } = AlignSelf.Auto;
+
+    /// <summary>Aligns grid items horizontally within their cells.</summary>
+    public AlignItems JustifyItems { get; init; } = AlignItems.Stretch;
     public double FlexGrow { get; init; }
     public double FlexShrink { get; init; } = 1;
     public Length FlexBasis { get; init; } = Length.Auto;
@@ -86,7 +119,22 @@ public sealed record Style
     public Edges Margin { get; init; } = Edges.Zero;
     public int RowGap { get; init; }
     public int ColumnGap { get; init; }
-    public Overflow Overflow { get; init; } = Overflow.Hidden;
+    public Overflow Overflow { get; init; } = Overflow.Visible;
+
+    /// <summary>How far a scrolling box's content is scrolled, in cells.</summary>
+    public int ScrollX { get; init; }
+    public int ScrollY { get; init; }
+
+    // Grid
+    /// <summary>Empty means one auto column.</summary>
+    public IReadOnlyList<Track> GridTemplateColumns { get; init; } = [];
+    /// <summary>Rows beyond these are sized to their content.</summary>
+    public IReadOnlyList<Track> GridTemplateRows { get; init; } = [];
+    /// <summary>A 1-based grid line, or null for auto-placement.</summary>
+    public int? GridColumnStart { get; init; }
+    public int? GridRowStart { get; init; }
+    public int GridColumnSpan { get; init; } = 1;
+    public int GridRowSpan { get; init; } = 1;
 
     /// <summary>Offsets for <see cref="Position.Absolute"/>; null means unset.</summary>
     public int? Top { get; init; }

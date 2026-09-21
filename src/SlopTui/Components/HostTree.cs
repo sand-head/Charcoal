@@ -378,6 +378,8 @@ public sealed class TextLayoutNode : ElementLayoutNode, ITextContent
 
     public override Size MeasureContent(int? availableWidth, int? availableHeight) =>
         TextLayout.Measure(Element.Runs, availableWidth, Style.Wrap);
+
+    public override int MinContentWidth() => TextLayout.MinContentWidth(Element.Runs, Style.Wrap);
 }
 
 /// <summary>A <c>canvas</c> element's node, painted by a delegate.</summary>

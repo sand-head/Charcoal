@@ -46,6 +46,34 @@ public static class TextLayout
         return new Size(widest, lines.Count);
     }
 
+    /// <summary>
+    /// The narrowest width that loses nothing: the widest word when wrapping,
+    /// otherwise the widest line.
+    /// </summary>
+    public static int MinContentWidth(IReadOnlyList<TextRun> runs, TextWrap mode)
+    {
+        if (mode != TextWrap.Wrap) return Measure(runs, null, mode).Width;
+
+        var widest = 0;
+        var word = 0;
+        foreach (var run in runs)
+        {
+            foreach (var (cluster, width) in TextWidth.Clusters(run.Text))
+            {
+                if (cluster is " " or "\n")
+                {
+                    widest = Math.Max(widest, word);
+                    word = 0;
+                }
+                else
+                {
+                    word += Math.Max(0, width);
+                }
+            }
+        }
+        return Math.Max(widest, word);
+    }
+
     public static int LineWidth(IReadOnlyList<TextRun> line)
     {
         var width = 0;

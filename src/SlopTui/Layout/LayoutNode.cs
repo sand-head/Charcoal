@@ -29,6 +29,15 @@ public abstract class LayoutNode
     /// <summary>The rect the engine assigned, in absolute terminal cells.</summary>
     public Rect Layout { get; internal set; }
 
+    /// <summary>The size of the in-flow content the last arrange placed, before scrolling.</summary>
+    public Size ContentSize { get; internal set; }
+
+    /// <summary>
+    /// The narrowest this node can be without losing content. It is the
+    /// automatic minimum width of a flex item that does not clip.
+    /// </summary>
+    public virtual int MinContentWidth() => 0;
+
     /// <summary>A leaf's size comes from <see cref="MeasureContent"/> rather than from children.</summary>
     public virtual bool IsLeaf => Children.Count == 0;
 
