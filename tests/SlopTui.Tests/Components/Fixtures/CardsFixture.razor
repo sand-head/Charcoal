@@ -1,0 +1,13 @@
+@using SlopTui.Layout
+@using SlopTui.Rendering
+@* Each heading is a Text component, so a component container sits between the card and its text. *@
+<Box FlexDirection="FlexDirection.Column">
+    <box class="card" focusable="true" id="card1">
+        <Text class="heading" id="heading1">plain card</Text>
+        <Text>body one</Text>
+    </box>
+    <box class="card" focusable="true" id="card2">
+        <Text class="heading" id="heading2">other card</Text>
+        <Text>body two</Text>
+    </box>
+</Box>

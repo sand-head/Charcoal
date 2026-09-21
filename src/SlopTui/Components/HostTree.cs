@@ -194,7 +194,19 @@ public sealed class HostElement : HostNode
             ? StyleResolver.Inherit(this, ApplyOwnAttributes(Style.Default))
             : StyleResolver.Resolve(this, _styles.Sheets, _styles.Focused);
 
-        if (IsInlineText) Parent?.ClosestElement?.DescendantsChanged(structural: false);
+        var lookChanged = previous.Color != Node.Style.Color
+            || previous.Background != Node.Style.Background
+            || previous.TextStyle != Node.Style.TextStyle;
+
+        // Text runs carry their colours and flags, so a new look invalidates them.
+        if (IsInlineText)
+        {
+            Parent?.ClosestElement?.DescendantsChanged(structural: false);
+        }
+        else if (IsText && lookChanged)
+        {
+            DescendantsChanged(structural: false);
+        }
 
         var affectsDescendants = changed is "class" or "id"
             || previous.Color != Node.Style.Color
