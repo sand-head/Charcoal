@@ -1,0 +1,187 @@
+# sloptui design
+
+sloptui renders Blazor components to a terminal. Components are `.razor`
+files reconciled by Blazor's own `Renderer`; the library lays them out with
+flexbox on a grid of terminal cells, paints them into a cell buffer, and
+writes the difference from the previous frame to the terminal.
+
+The component model is Blazor's. Everything after the render tree belongs to
+this library.
+
+## Layers
+
+```
+ .razor components ──► Blazor Renderer ──► host tree (HostElement/HostText)
+                                               │  LayoutNode: Style + Children
+                                               ▼
+                                          FlexLayout (measure/arrange, cached)
+                                               │  Rect per node, absolute cells
+                                               ▼
+                                          Painter ──► CellBuffer (Screen.Back)
+                                               │
+                                               ▼
+                                          Screen.Flush() ──► one write ──► ITerminal
+ ITerminal input thread ──► AnsiKeyParser ──► InputEvent ──► focus/bubbling ──► @onkeypress …
+```
+
+| Namespace | Owns | Depends on |
+|---|---|---|
+| `SlopTui.Layout` | `Style` (the CSS subset), `Length`, `Edges`, geometry, `LayoutNode`, `FlexLayout`, `StyleParser` | `SlopTui.Rendering` for `Color` only |
+| `SlopTui.Rendering` | `Color`, `TextStyle`, `TextRun`, `Cell`, `CellBuffer`, `Screen` (diff → ANSI), `TextWidth`, `TextLayout` (wrapping), `Painter`, `ITextContent`, `ICustomPaint` | `SlopTui.Layout` for `Rect`/`Style` |
+| `SlopTui.Input` | `Key`, `KeyModifiers`, `KeyEvent`, `MouseEvent`, `PasteEvent`, `FocusEvent`, `AnsiKeyParser`, `InputPump` | nothing |
+| `SlopTui.Terminal` | `ITerminal`, `ConsoleTerminal` (Unix termios + Windows VT), `HeadlessTerminal`, `TerminalOptions` | `SlopTui.Layout` for `Size` |
+| `SlopTui.Components` | `TerminalRenderer`, `TerminalDispatcher`, host tree, `TuiApp`, `Box`, `Text`, `Canvas`, `Spacer`, `Newline`, focus, event args, `EventHandlers` | everything above |
+
+Rules between the layers:
+
+- `Layout`, `Rendering`, `Input`, `Terminal` never reference
+  `Microsoft.AspNetCore.Components`. They are testable with plain objects.
+- Only `Components` knows what a render batch is.
+- Every layer has a headless test path: the parser is pure (text and a clock
+  stamp in, events out), the layout engine works on any `LayoutNode`, the
+  painter writes into a `CellBuffer`, `Screen.Flush()` returns a string, and
+  `HeadlessTerminal` captures writes and injects input.
+
+## The host tree
+
+Blazor's diff produces edits against a tree of *frames*: elements, text,
+attributes, components, regions. The browser renderer applies those edits to
+the DOM through a "logical element" layer where components and regions are
+containers that do not exist in the DOM. The host tree does the same:
+
+- `HostNode` — base: `Parent`, logical `Children`.
+- `HostElement : HostNode, LayoutNode` — a named element (`box`, `text`,
+  `canvas`) with attributes. Its *layout* children are its logical descendants
+  with containers flattened out.
+- `HostTextNode : HostNode` — a text frame. It is not a layout node; the
+  nearest `text` element ancestor collects its runs.
+- `HostContainer : HostNode` — a component or region. Transparent to layout.
+
+Edits are applied exactly as `BrowserRenderer.ts` does: `PrependFrame`,
+`RemoveFrame`, `SetAttribute`, `RemoveAttribute`, `UpdateText`, `StepIn`,
+`StepOut`, `PermutationListEntry/End`; sibling indices count *logical*
+children.
+
+## Elements and attributes
+
+Three element names. Attribute names are kebab-case CSS names; values may be
+strings (from Razor literals) or typed objects (from `@` expressions), and
+`StyleParser` accepts both.
+
+**`box`** — a flex container. Layout attributes: `display` (flex|none),
+`flex-direction` (row|column|row-reverse|column-reverse), `justify-content`
+(flex-start|center|flex-end|space-between|space-around|space-evenly),
+`align-items` / `align-self` (stretch|flex-start|center|flex-end),
+`flex-grow`, `flex-shrink`, `flex-basis`, `width`, `height`, `min-width`,
+`min-height`, `max-width`, `max-height` (cells, `N%`, or `auto`),
+`padding`, `padding-{top,right,bottom,left}`, `padding-x`, `padding-y`,
+`margin*` likewise, `gap`, `row-gap`, `column-gap`, `overflow`
+(hidden|visible), `position` (relative|absolute), `top`, `right`, `bottom`,
+`left`. Visual attributes: `background` (a colour), `border`
+(none|single|double|round|bold|classic), `border-color`,
+`border-{top,right,bottom,left}` (booleans, default all on when a border is
+set). `style="…"` takes the same properties as inline CSS text.
+
+**`text`** — a leaf for layout, wrapped to its width. Visual attributes:
+`color`, `background`, `bold`, `dim`, `italic`, `underline`, `inverse`,
+`strikethrough`, `wrap` (wrap|truncate|truncate-start|truncate-middle|clip).
+It also takes the box layout attributes that make sense for a flex item
+(`flex-*`, `width`, `height`, `min-*`, `max-*`, `margin*`, `padding*`,
+`align-self`). A `text` nested in a `text` is a styled run inheriting the
+outer style; it is not a layout node. `"\n"` inside text is a line break.
+
+**`canvas`** — a leaf whose content is painted by a delegate: attribute
+`paint` of type `Action<CellBuffer, Rect>`. This is how a component owns a
+region wholesale (a transcript, a chart) without a node per line. It takes
+the flex-item layout attributes.
+
+Colours: `default`, the sixteen ANSI names (`black … white`,
+`bright-black … bright-white`), `#rrggbb`, `rgb(r,g,b)`, `ansi(n)` for the
+256-colour index. See `Color.Parse`.
+
+Lengths: an integer is cells; `50%` is a percentage of the parent's content
+box on that axis; `auto` means "from content".
+
+## Layout
+
+Measure/arrange, not a single Yoga pass, because a terminal is integers and
+the subset is small:
+
+- `Measure(node, availableWidth?, availableHeight?) → Size` computes the
+  node's intrinsic size under constraints. A leaf answers from
+  `MeasureContent`; a box lays its children out under the constraints and
+  reports the extent. Results are cached on the node, keyed on the
+  constraints, until `InvalidateLayout()` is called on the node or a
+  descendant (it bubbles to the root).
+- `Arrange(node, rect)` assigns final rects to the subtree. Main-axis sizes
+  come from the flex algorithm: hypothetical sizes from basis, explicit size
+  or content; free space distributed by grow, or by shrink weighted by basis;
+  min/max clamping with the freeze loop; then justify-content and gaps.
+  Cross-axis sizes come from explicit size, `stretch`, or content; align
+  offsets after.
+- `Layout(root, viewport)` = `Measure` then `Arrange` from `(0,0,viewport)`.
+- `display: none` removes a node from flow and paint. `position: absolute`
+  removes it from flow and places it by its offsets inside the parent's
+  padding box.
+- Rects are absolute terminal cells, so the painter needs no coordinate walk.
+
+After one text changes, a frame re-measures that text node and re-arranges
+its ancestors; siblings answer from their cache.
+
+## Painting and flushing
+
+`Painter.Paint(root, buffer)` walks the arranged tree depth-first: fill the
+box background if set, draw the border, then paint children clipped to the
+box's padding box unless `overflow: visible`. Text paints its wrapped lines
+(`TextLayout`), a canvas calls its delegate with a buffer clipped to its rect.
+
+`Screen` holds two `CellBuffer`s, shown and back. `Flush()` compares rows by
+hash, repaints only the span between the first and last differing cells of a
+changed row, emits one pen change per run of equal attributes, clears an
+emptied tail with `ESC[K`, wraps the frame in DEC 2026 when the terminal
+supports it, and returns the whole frame as one string. The app writes it
+with one call, because many small writes make a terminal lag.
+
+## Input
+
+The input thread reads chunks and stamps each with the clock. `AnsiKeyParser`
+is pure: chunks and stamps in, `InputEvent`s out; it resolves the lone-ESC
+ambiguity with an 8 ms gap measured on those stamps, holds split sequences
+and paste bodies, decodes SGR mouse, CSI/SS3 keys, kitty keyboard sequences,
+and swallows terminal replies. `InputPump` feeds it from the thread's queue
+on the app loop and ticks it so a pending ESC expires.
+
+Routing on the app loop: a key goes to the focused element's `@onkeypress`,
+then bubbles to each ancestor's, then to the root's; the first handler that
+sets `Handled` stops it. Focus lives in `FocusManager`: elements with
+`focusable="true"` are registered in tree order; `Tab` and `Shift+Tab` move
+it unless a handler took the key. Mouse events hit-test the arranged tree and
+dispatch `@onclick` (and `@onmouse` for everything else) from the deepest
+element outward. `@onfocus` / `@onblur` fire on change.
+
+Event names and argument types are declared in `EventHandlers` with
+`[EventHandler]`, exactly as `Microsoft.AspNetCore.Components.Web` declares the
+DOM's, so Razor type-checks handlers.
+
+## The app loop
+
+One thread, the one that called `TuiApp.Run`. It is the Blazor dispatcher:
+`TerminalDispatcher.InvokeAsync` queues work for it and completes when it
+ran; from the loop thread it runs inline. Per iteration: drain the dispatcher
+queue, pump input, run due timers, and if a render batch or a resize landed
+since the last frame and at least 16 ms passed, lay out and paint and flush.
+Idle, it waits on the queue with a timeout only as short as the next thing it
+is waiting for (a pending ESC, a timer, resize polling on Windows).
+
+`TuiApp.Exit()` ends the loop; `Run` restores the terminal on every path
+including an unhandled exception, which is rethrown after the restore so the
+message lands on a readable screen.
+
+## Conventions
+
+- Public API is `PascalCase`; element attribute names are kebab-case.
+- Public types carry a short summary. Comments explain why, not what.
+- Tests are xunit, one file per type under test, named for the behaviour
+  (`A_flush_with_nothing_changed_writes_nothing`).
+- No `.Result`, no `.Wait()`, no `Thread.Sleep` outside `ConsoleTerminal`.
+- `TreatWarningsAsErrors` is on. BL0006 is the one suppressed warning.

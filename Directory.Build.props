@@ -1,0 +1,16 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>preview</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- BL0006: a renderer for a non-browser host has to use the RenderTree types. -->
+    <NoWarn>$(NoWarn);BL0006</NoWarn>
+    <Authors>Jessie Schweigert</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://git.sand.town/sand_head/sloptui</RepositoryUrl>
+    <PackageProjectUrl>https://git.sand.town/sand_head/sloptui</PackageProjectUrl>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>

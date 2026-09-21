@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SlopTui/SlopTui.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SlopTui.Tests/SlopTui.Tests.csproj" />
+  </Folder>
+</Solution>
