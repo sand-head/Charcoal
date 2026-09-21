@@ -150,7 +150,7 @@ public sealed class AnsiKeyParser
         }
 
         if (text[1] == ']') return ParseTerminatedReply(text, OscEnd(text), out inputEvent);
-        if (text[1] == 'P') return ParseTerminatedReply(text, StringTerminatorEnd(text), out inputEvent);
+        if (text[1] is 'P' or '_') return ParseTerminatedReply(text, StringTerminatorEnd(text), out inputEvent);
         if (text.StartsWith("\e[<")) return ParseMouse(text, out inputEvent);
         if (text.StartsWith(PasteStart)) return ParsePaste(text, out inputEvent);
 

@@ -16,7 +16,11 @@ public static class ImagePainter
     /// one, the other follows the aspect ratio; given neither, the image is at
     /// its natural size, shrunk to the available width.
     /// </summary>
-    public static Size Fit(ImageData image, int? width, int? height, int? availableWidth)
+    public static Size Fit(ImageData image, int? width, int? height, int? availableWidth) =>
+        Fit(image, width, height, availableWidth, CellPixelWidth, CellPixelHeight);
+
+    /// <summary>As <see cref="Fit(ImageData, int?, int?, int?)"/>, with the terminal's real cell size.</summary>
+    public static Size Fit(ImageData image, int? width, int? height, int? availableWidth, int cellWidth, int cellHeight)
     {
         var ratio = (double)image.Height / image.Width;
         switch (width, height)
@@ -24,25 +28,41 @@ public static class ImagePainter
             case ({ } givenWidth, { } givenHeight):
                 return new Size(Math.Max(1, givenWidth), Math.Max(1, givenHeight));
             case ({ } onlyWidth, null):
-                return new Size(Math.Max(1, onlyWidth), Rows(onlyWidth, ratio));
+                return new Size(Math.Max(1, onlyWidth), Rows(onlyWidth, ratio, cellWidth, cellHeight));
             case (null, { } onlyHeight):
-                return new Size(Columns(onlyHeight, ratio), Math.Max(1, onlyHeight));
+                return new Size(Columns(onlyHeight, ratio, cellWidth, cellHeight), Math.Max(1, onlyHeight));
         }
 
-        var naturalColumns = (int)Math.Ceiling(image.Width / (double)CellPixelWidth);
+        var naturalColumns = (int)Math.Ceiling(image.Width / (double)cellWidth);
         if (availableWidth is { } available && available < naturalColumns)
         {
             var columns = Math.Max(1, available);
-            return new Size(columns, Rows(columns, ratio));
+            return new Size(columns, Rows(columns, ratio, cellWidth, cellHeight));
         }
-        return new Size(naturalColumns, (int)Math.Ceiling(image.Height / (double)CellPixelHeight));
+        return new Size(naturalColumns, (int)Math.Ceiling(image.Height / (double)cellHeight));
     }
 
-    private static int Rows(int columns, double ratio) =>
-        Math.Max(1, (int)Math.Round(columns * ratio * CellPixelWidth / CellPixelHeight));
+    private static int Rows(int columns, double ratio, int cellWidth, int cellHeight) =>
+        Math.Max(1, (int)Math.Round(columns * ratio * cellWidth / cellHeight));
 
-    private static int Columns(int rows, double ratio) =>
-        Math.Max(1, (int)Math.Round(rows / ratio * CellPixelHeight / CellPixelWidth));
+    private static int Columns(int rows, double ratio, int cellWidth, int cellHeight) =>
+        Math.Max(1, (int)Math.Round(rows / ratio * cellHeight / cellWidth));
+
+    /// <summary>
+    /// Paints the image with the terminal's graphics protocol when it has one,
+    /// and as half blocks otherwise.
+    /// </summary>
+    public static void Paint(CellBuffer buffer, Rect rect, ImageData image, Graphics? graphics)
+    {
+        if (rect.IsEmpty) return;
+        if (graphics is { UsesProtocol: true })
+        {
+            var id = graphics.Place(image, rect.Width, rect.Height);
+            KittyGraphics.PaintPlaceholders(buffer, rect, id);
+            return;
+        }
+        Paint(buffer, rect, image);
+    }
 
     /// <summary>Paints the image stretched over <paramref name="rect"/>.</summary>
     public static void Paint(CellBuffer buffer, Rect rect, ImageData image)

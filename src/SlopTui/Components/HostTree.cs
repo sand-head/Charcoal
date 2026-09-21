@@ -166,9 +166,10 @@ public sealed class HostElement : HostNode
         return styles;
     }
 
-    public HostElement(string name, CanvasRegistry? canvases = null, StyleContext? styles = null)
+    public HostElement(string name, CanvasRegistry? canvases = null, StyleContext? styles = null, Graphics? graphics = null)
     {
         Name = name;
+        Graphics = graphics;
         IsText = name == "text" || HtmlInline.ContainsKey(name);
         IsInline = IsText && name != "text";
         IsBreak = name == "br";
@@ -186,6 +187,9 @@ public sealed class HostElement : HostNode
         if (HtmlBlock.TryGetValue(name, out var block)) return block;
         return Style.Default;
     }
+
+    /// <summary>The terminal's picture capabilities, or null outside an app.</summary>
+    public Graphics? Graphics { get; }
 
     /// <summary>The classes in the <c>class</c> attribute.</summary>
     public IReadOnlySet<string> Classes { get; private set; } = NoClasses;
@@ -746,7 +750,9 @@ public sealed class ImageLayoutNode : ElementLayoutNode, ICustomPaint
 
         var fixedWidth = Style.Width.IsAuto ? null : availableWidth;
         var fixedHeight = Style.Height.IsAuto ? null : availableHeight;
-        return ImagePainter.Fit(image, fixedWidth, fixedHeight, availableWidth);
+        var cellWidth = Element.Graphics?.CellPixelWidth ?? ImagePainter.CellPixelWidth;
+        var cellHeight = Element.Graphics?.CellPixelHeight ?? ImagePainter.CellPixelHeight;
+        return ImagePainter.Fit(image, fixedWidth, fixedHeight, availableWidth, cellWidth, cellHeight);
     }
 
     public override int MinContentWidth() =>
@@ -760,7 +766,7 @@ public sealed class ImageLayoutNode : ElementLayoutNode, ICustomPaint
             buffer.PutText(rect.X, rect.Y, Alt, Style.Color, Style.Background, Style.TextStyle);
             return;
         }
-        ImagePainter.Paint(buffer, rect, image);
+        ImagePainter.Paint(buffer, rect, image, Element.Graphics);
     }
 }
 

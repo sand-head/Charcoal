@@ -125,6 +125,24 @@ pixel rows per cell with the upper-half block, in truecolour, and leaves a
 mostly transparent sample's cell alone. The available height is ignored,
 because it differs between the unbounded hypothetical measure and the final one.
 
+**Full-resolution pictures.** Before its first frame the app sends the kitty
+graphics query (a one-pixel image with `a=q`), XTWINOPS 16 for the cell size
+in pixels, and DA1. The parser turns the answers into `ReplyEvent`s, and
+`TuiApp` records them in `Graphics`, the per-app object every element
+receives: `Kitty` when the query said OK, `CellPixels` from the size report,
+and `Detected` once DA1 answers, since a terminal without the protocol only
+answers DA1. Pictures painted before the answers are repainted.
+
+With `Kitty`, pictures use the protocol's Unicode placeholder mode.
+`Graphics.Place` transmits each (image, columns, rows) once, as compressed
+RGBA in quiet mode with a virtual placement of that many cells, and the
+cells become `U+10EEEE` with row and column diacritics and the image id as
+their foreground colour. The terminal draws the picture over exactly those
+cells, so clipping, scrolling and overlap need nothing beyond the cell diff.
+A transmission goes out in the same write as the frame that first uses it,
+and every image is deleted on exit. Ids carry a per-process high byte so two
+apps in one terminal do not replace each other's pictures.
+
 **`canvas`** — a leaf painted by a delegate. The `Canvas` component
 registers its `Paint` delegate in the `CanvasRegistry` service and puts the
 registry key in the element's `paint` attribute, since an element attribute

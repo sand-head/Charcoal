@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.RenderTree;
 using Microsoft.Extensions.Logging;
 using SlopTui.Layout;
+using SlopTui.Rendering;
 using SlopTui.Styling;
 
 namespace SlopTui.Components;
@@ -18,6 +19,7 @@ public sealed class TerminalRenderer : Renderer
     private readonly Action<Exception> _onException;
     private readonly CanvasRegistry? _canvases;
     private readonly StyleContext? _styles;
+    private readonly Graphics? _graphics;
 
     public TerminalRenderer(IServiceProvider services, ILoggerFactory loggerFactory, TerminalDispatcher dispatcher, Action<Exception> onException, StyleContext? styles = null)
         : base(services, loggerFactory)
@@ -25,8 +27,9 @@ public sealed class TerminalRenderer : Renderer
         Dispatcher = dispatcher;
         _onException = onException;
         _canvases = services.GetService(typeof(CanvasRegistry)) as CanvasRegistry;
+        _graphics = services.GetService(typeof(Graphics)) as Graphics;
         _styles = styles;
-        Root = new HostElement("box", _canvases, _styles);
+        Root = new HostElement("box", _canvases, _styles, _graphics);
         Root.SetAttribute("flex-direction", "column", 0);
     }
 
@@ -308,7 +311,7 @@ public sealed class TerminalRenderer : Renderer
     private HostContainer Markup(string markup)
     {
         var container = new HostContainer();
-        var nodes = MarkupParser.Parse(markup, name => new HostElement(name, _canvases, _styles));
+        var nodes = MarkupParser.Parse(markup, name => new HostElement(name, _canvases, _styles, _graphics));
         for (var i = 0; i < nodes.Count; i++)
         {
             container.InsertChild(i, nodes[i]);
@@ -319,7 +322,7 @@ public sealed class TerminalRenderer : Renderer
     private void InsertElement(HostNode parent, int childIndex, ArrayRange<RenderTreeFrame> frames, int frameIndex)
     {
         var frame = frames.Array[frameIndex];
-        var element = new HostElement(frame.ElementName, _canvases, _styles);
+        var element = new HostElement(frame.ElementName, _canvases, _styles, _graphics);
         var end = frameIndex + frame.ElementSubtreeLength;
         var descendant = frameIndex + 1;
         for (; descendant < end; descendant++)

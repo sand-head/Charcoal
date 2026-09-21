@@ -53,6 +53,7 @@ public sealed class TuiApp
     private volatile bool _exitRequested;
     private volatile bool _resized;
     private Size _size;
+    private string _startup = "";
 
     public TuiApp(ITerminal? terminal = null, TuiAppOptions? options = null, ILoggerFactory? loggerFactory = null)
     {
@@ -62,7 +63,11 @@ public sealed class TuiApp
         Services.AddSingleton(this);
         Services.AddSingleton(_terminal);
         Services.AddSingleton(new CanvasRegistry());
+        Services.AddSingleton(Graphics);
     }
+
+    /// <summary>The terminal's picture capabilities and the images sent to it.</summary>
+    public Graphics Graphics { get; } = new();
 
     /// <summary>Services for components to <c>@inject</c>, registered before <see cref="Run{TRoot}"/>.</summary>
     public IServiceCollection Services { get; } = new ServiceCollection();
@@ -81,6 +86,12 @@ public sealed class TuiApp
 
     /// <summary>Whether frames are wrapped in synchronized-output markers (DEC 2026).</summary>
     public bool SynchronizedOutput { get; set; } = true;
+
+    /// <summary>
+    /// Whether to query the terminal's graphics support and cell size at start.
+    /// Without it, pictures are drawn as half blocks.
+    /// </summary>
+    public bool DetectGraphics { get; set; } = true;
 
     /// <summary>Raised on the loop thread after every painted frame.</summary>
     public event Action<FrameStats>? FramePainted;
@@ -149,6 +160,16 @@ public sealed class TuiApp
         try
         {
             _terminal.Start(_options.Terminal);
+            // Sent with the first frame. DA1 comes last because every terminal
+            // answers it, so its reply means the others will not come.
+            if (DetectGraphics && _terminal.IsInteractive)
+            {
+                _startup = KittyGraphics.Query + Ansi.QueryCellPixels + Ansi.QueryDeviceAttributes;
+            }
+            else
+            {
+                Graphics.Detected = true;
+            }
             _renderer.SetViewport(_size);
             var parameterView = parameters is null
                 ? ParameterView.Empty
@@ -160,6 +181,8 @@ public sealed class TuiApp
         finally
         {
             _styles.Sheets.Changed -= OnStylesheetsChanged;
+            var release = Graphics.ReleaseAll();
+            if (release.Length > 0) _terminal.Write(release);
             _terminal.Stop();
             _terminal.InputReceived -= _pump.Enqueue;
             _terminal.Resized -= OnResized;
@@ -262,6 +285,13 @@ public sealed class TuiApp
 
         var flushStart = Stopwatch.GetTimestamp();
         var frame = _screen.Flush();
+        // Images go ahead of the frame that shows them, in the same write.
+        if (Graphics.HasPending) frame = Graphics.TakePending() + frame;
+        if (_startup.Length > 0)
+        {
+            frame = _startup + frame;
+            _startup = "";
+        }
         if (frame.Length > 0) _terminal.Write(frame);
         var flushEnd = Stopwatch.GetTimestamp();
 
@@ -303,6 +333,7 @@ public sealed class TuiApp
                     KeyEvent key => RouteKeyAsync(key),
                     PasteEvent paste => RoutePasteAsync(paste),
                     MouseEvent mouse => RouteMouseAsync(mouse),
+                    ReplyEvent reply => OnReply(reply),
                     _ => Task.CompletedTask,
                 };
                 // A handler that goes async reports its failure through the dispatcher.
@@ -335,6 +366,55 @@ public sealed class TuiApp
             return;
         }
         if (_options.ExitOnCtrlC && key.IsCtrl('c')) Exit();
+    }
+
+    /// <summary>
+    /// Handles the answers to the start-up queries, repainting pictures that
+    /// were drawn before the terminal said what it supports.
+    /// </summary>
+    private Task OnReply(ReplyEvent reply)
+    {
+        var sequence = reply.Sequence;
+        if (KittyGraphics.IsQueryReply(sequence, out var ok))
+        {
+            Graphics.Kitty = ok;
+            RepaintPictures();
+        }
+        else if (TryParseCellPixels(sequence, out var cellPixels))
+        {
+            Graphics.CellPixels = cellPixels;
+            RepaintPictures();
+        }
+        else if (sequence.StartsWith("\e[?", StringComparison.Ordinal) && sequence.EndsWith('c'))
+        {
+            Graphics.Detected = true;
+        }
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Reads the <c>CSI 6 ; height ; width t</c> reply to the cell size query.</summary>
+    private static bool TryParseCellPixels(string sequence, out Size size)
+    {
+        size = Size.Empty;
+        if (!sequence.StartsWith("\e[6;", StringComparison.Ordinal) || !sequence.EndsWith('t')) return false;
+
+        var parts = sequence[2..^1].Split(';');
+        if (parts.Length != 3) return false;
+        if (!int.TryParse(parts[1], out var height) || !int.TryParse(parts[2], out var width)) return false;
+        if (width <= 0 || height <= 0) return false;
+
+        size = new Size(width, height);
+        return true;
+    }
+
+    private void RepaintPictures()
+    {
+        if (_renderer is null) return;
+        foreach (var element in _renderer.Root.Descendants().OfType<HostElement>().Where(e => e.IsImage))
+        {
+            element.Node.InvalidateLayout();
+        }
+        _renderer.Dirty = true;
     }
 
     private async Task RoutePasteAsync(PasteEvent paste)

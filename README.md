@@ -46,9 +46,12 @@ return new TuiApp().Run<App>();
   children stack, where a `<box>` is a row; headings are bold.
 - **Pictures.** `<img src="logo.png" width="24" />`, or the `Image`
   component, decodes PNG, JPEG, GIF, BMP, TGA and PSD without a native
-  library and paints two pixel rows per cell in truecolour. Given one side,
-  the other follows the image's shape; given neither, it shrinks to fit.
-  `alt` shows when the source does not decode.
+  library. Terminals with the kitty graphics protocol (kitty, WezTerm,
+  Ghostty, Konsole) show it at full resolution, and it still clips and
+  scrolls like text; elsewhere it is drawn as half blocks in truecolour.
+  Given one side, the other follows the image's shape; given neither, it
+  shrinks to fit. Sizes use the terminal's reported cell size. `alt` shows
+  when the source does not decode.
   Parameters, `@key`, `EventCallback`, cascading values, `@inject`,
   `StateHasChanged` and `InvokeAsync` work as they do on the web.
 - **Flexbox and grid on cells.** Direction, wrap, justify, align (items,

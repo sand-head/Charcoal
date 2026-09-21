@@ -54,5 +54,8 @@ public static class Ansi
     public const string QueryCursorPosition = "\e[6n";
     public const string QueryKittyKeyboard = "\e[?u";
 
+    /// <summary>XTWINOPS 16, the cell size in pixels. The reply is <c>CSI 6 ; height ; width t</c>.</summary>
+    public const string QueryCellPixels = "\e[16t";
+
     public const string EraseToEndOfLine = "\e[K";
 }
