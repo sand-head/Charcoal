@@ -47,6 +47,12 @@ public abstract class LayoutNode
     internal bool LayoutDirty { get; set; } = true;
 
     internal (int? Width, int? Height, Size Result)? MeasureCache { get; set; }
+
+    /// <summary>
+    /// The previous cache entry. A node is measured once while its container is
+    /// measured and again while it is arranged, often under different constraints.
+    /// </summary>
+    internal (int? Width, int? Height, Size Result)? MeasureCacheAlt { get; set; }
 }
 
 /// <summary>A layout node with an explicit child list.</summary>
