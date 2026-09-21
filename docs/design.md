@@ -96,6 +96,11 @@ It also takes the box layout attributes that make sense for a flex item
 (`flex-*`, `width`, `height`, `min-*`, `max-*`, `margin*`, `padding*`,
 `align-self`). A `text` nested in a `text` is a styled run inheriting the
 outer style; it is not a layout node. `"\n"` inside text is a line break.
+The HTML inline tags are text elements with a preset: `strong`/`b` bold,
+`em`/`i` italic, `u` underline, `s`/`del`/`strike` strikethrough, `mark`
+inverse, `span` nothing, and `br` a line break. Sheets and attributes apply
+on top of the preset, and type selectors match the tag as written, so
+`strong { color: red }` matches `<strong>` and no other bold run.
 
 **`canvas`** — a leaf painted by a delegate. The `Canvas` component
 registers its `Paint` delegate in the `CanvasRegistry` service and puts the

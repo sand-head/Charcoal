@@ -37,7 +37,10 @@ return new TuiApp().Run<App>();
 - **Razor components.** `Box`, `Text`, `Canvas`, `Spacer`, `Newline`, or the
   bare `<box>` and `<canvas>` elements with kebab-case attributes. Razor
   reserves `<text>` inside code blocks such as `@if` and `@foreach`, so use
-  `<Run>`, the same component, there.
+  `<Run>`, the same component, there. HTML inline tags work inside a text:
+  `<strong>`/`<b>` bold, `<em>`/`<i>` italic, `<u>`, `<s>`/`<del>`, `<mark>`
+  (inverse), `<span>` and `<br>`. Sheets and attributes override the tag,
+  so `<strong bold="false">` is plain.
   Parameters, `@key`, `EventCallback`, cascading values, `@inject`,
   `StateHasChanged` and `InvokeAsync` work as they do on the web.
 - **Flexbox and grid on cells.** Direction, wrap, justify, align (items,

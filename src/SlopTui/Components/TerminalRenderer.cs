@@ -189,7 +189,7 @@ public sealed class TerminalRenderer : Renderer
                     var frame = frames.Array[edit.ReferenceFrameIndex];
                     var index = childIndexAtDepth + edit.SiblingIndex;
                     RemoveChild(parent, index);
-                    parent.InsertChild(index, new HostTextNode { Text = frame.MarkupContent });
+                    parent.InsertChild(index, Markup(frame.MarkupContent));
                     break;
                 }
 
@@ -255,7 +255,7 @@ public sealed class TerminalRenderer : Renderer
                 return 1;
 
             case RenderTreeFrameType.Markup:
-                parent.InsertChild(childIndex, new HostTextNode { Text = frame.MarkupContent });
+                parent.InsertChild(childIndex, Markup(frame.MarkupContent));
                 return 1;
 
             case RenderTreeFrameType.Component:
@@ -300,6 +300,21 @@ public sealed class TerminalRenderer : Renderer
         RenderTreeFrameType.Region => frame.RegionSubtreeLength,
         _ => 1,
     };
+
+    /// <summary>
+    /// Parses a markup frame into a container, since the frame counts as one
+    /// child but can hold several nodes.
+    /// </summary>
+    private HostContainer Markup(string markup)
+    {
+        var container = new HostContainer();
+        var nodes = MarkupParser.Parse(markup, name => new HostElement(name, _canvases, _styles));
+        for (var i = 0; i < nodes.Count; i++)
+        {
+            container.InsertChild(i, nodes[i]);
+        }
+        return container;
+    }
 
     private void InsertElement(HostNode parent, int childIndex, ArrayRange<RenderTreeFrame> frames, int frameIndex)
     {

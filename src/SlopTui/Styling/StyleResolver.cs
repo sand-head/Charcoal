@@ -16,7 +16,7 @@ public static class StyleResolver
 {
     public static Style Resolve(HostElement element, IReadOnlyList<Stylesheet> sheets, HostElement? focused)
     {
-        var style = Style.Default;
+        var style = element.BaseStyle;
         foreach (var rule in MatchingRules(element, sheets, focused))
         {
             foreach (var declaration in rule.Declarations)

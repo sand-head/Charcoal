@@ -110,7 +110,9 @@ public sealed class HostTextNode : HostNode
 /// <summary>
 /// A <c>box</c>, <c>text</c> or <c>canvas</c> element. Its layout children are
 /// its descendant elements with containers flattened out; a <c>text</c>
-/// element is a leaf whose nested <c>text</c> elements are styled runs.
+/// element is a leaf whose nested <c>text</c> elements are styled runs. HTML
+/// inline tags such as <c>strong</c> and <c>br</c> are text elements with a
+/// preset style, and any other name is a box.
 /// </summary>
 /// <remarks>
 /// The style is rebuilt from all the attributes whenever one changes, so a
@@ -127,9 +129,33 @@ public sealed class HostElement : HostNode
     private readonly StyleContext? _styles;
     private static readonly IReadOnlySet<string> NoClasses = new HashSet<string>();
 
+    /// <summary>
+    /// The text style each HTML inline tag starts from. Stylesheets and
+    /// attributes apply on top, as over a browser's default stylesheet.
+    /// </summary>
+    private static readonly Dictionary<string, TextStyle> HtmlInline = new(StringComparer.Ordinal)
+    {
+        ["strong"] = TextStyle.Bold,
+        ["b"] = TextStyle.Bold,
+        ["em"] = TextStyle.Italic,
+        ["i"] = TextStyle.Italic,
+        ["u"] = TextStyle.Underline,
+        ["s"] = TextStyle.Strikethrough,
+        ["del"] = TextStyle.Strikethrough,
+        ["strike"] = TextStyle.Strikethrough,
+        ["mark"] = TextStyle.Inverse,
+        ["span"] = TextStyle.None,
+        ["br"] = TextStyle.None,
+    };
+
     public HostElement(string name, CanvasRegistry? canvases = null, StyleContext? styles = null)
     {
         Name = name;
+        IsText = name == "text" || HtmlInline.ContainsKey(name);
+        IsBreak = name == "br";
+        BaseStyle = HtmlInline.TryGetValue(name, out var preset) && preset != TextStyle.None
+            ? Style.Default with { TextStyle = preset }
+            : Style.Default;
         Node = ElementLayoutNode.For(this);
         _canvases = canvases;
         _styles = styles;
@@ -141,11 +167,20 @@ public sealed class HostElement : HostNode
 
     public string? Id { get; private set; }
 
+    /// <summary>The element name as written, which type selectors match.</summary>
     public string Name { get; }
 
     public ElementLayoutNode Node { get; }
 
-    public bool IsText => Name == "text";
+    /// <summary>Whether this is <c>text</c> or an HTML inline tag.</summary>
+    public bool IsText { get; }
+
+    /// <summary>Whether this is a <c>&lt;br&gt;</c>.</summary>
+    public bool IsBreak { get; }
+
+    /// <summary>The style the cascade starts from: the tag's preset, if it has one.</summary>
+    internal Style BaseStyle { get; }
+
     public bool IsCanvas => Name == "canvas";
 
     /// <summary>Whether this is a <c>text</c> element nested in another, and so a styled run.</summary>
@@ -191,7 +226,7 @@ public sealed class HostElement : HostNode
         var previous = Node.Style;
         ReadIdentity();
         Node.Style = _styles is null
-            ? StyleResolver.Inherit(this, ApplyOwnAttributes(Style.Default))
+            ? StyleResolver.Inherit(this, ApplyOwnAttributes(BaseStyle))
             : StyleResolver.Resolve(this, _styles.Sheets, _styles.Focused);
 
         var lookChanged = previous.Color != Node.Style.Color
@@ -369,7 +404,7 @@ public sealed class HostElement : HostNode
                         into.Add(new TextRun(text.Text, fg, bg, style));
                     }
                     break;
-                case HostElement { IsText: true } inline when inline.Attributes.ContainsKey("newline"):
+                case HostElement { IsText: true } inline when inline.IsBreak || inline.Attributes.ContainsKey("newline"):
                     into.Add(new TextRun("\n", fg, bg, style));
                     break;
                 case HostElement { IsText: true } inline:
@@ -441,12 +476,12 @@ public class ElementLayoutNode : LayoutNode
 
     public override IReadOnlyList<LayoutNode> Children => Element.LayoutChildren;
 
-    public static ElementLayoutNode For(HostElement element) => element.Name switch
+    public static ElementLayoutNode For(HostElement element)
     {
-        "text" => new TextLayoutNode(element),
-        "canvas" => new CanvasLayoutNode(element),
-        _ => new ElementLayoutNode(element),
-    };
+        if (element.IsText) return new TextLayoutNode(element);
+        if (element.IsCanvas) return new CanvasLayoutNode(element);
+        return new ElementLayoutNode(element);
+    }
 }
 
 /// <summary>A <c>text</c> element's node, measured by wrapping its runs.</summary>
