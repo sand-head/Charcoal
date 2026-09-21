@@ -1,5 +1,6 @@
 using SlopTui.Layout;
 using SlopTui.Rendering;
+using SlopTui.Styling;
 
 namespace SlopTui.Components;
 
@@ -35,6 +36,8 @@ public abstract class HostNode
         child.Parent?.DetachChild(child);
         _children.Insert(Math.Clamp(index, 0, _children.Count), child);
         child.Parent = this;
+        // Selectors with combinators and inherited colours need the ancestors.
+        if (child is HostElement element) element.Restyle();
         StructureChanged();
     }
 
@@ -121,13 +124,22 @@ public sealed class HostElement : HostNode
     private List<TextRun>? _runs;
 
     private readonly CanvasRegistry? _canvases;
+    private readonly StyleContext? _styles;
+    private static readonly IReadOnlySet<string> NoClasses = new HashSet<string>();
 
-    public HostElement(string name, CanvasRegistry? canvases = null)
+    public HostElement(string name, CanvasRegistry? canvases = null, StyleContext? styles = null)
     {
         Name = name;
         Node = ElementLayoutNode.For(this);
         _canvases = canvases;
+        _styles = styles;
+        if (_styles is not null && _styles.Sheets.Count > 0) Rebuild(null);
     }
+
+    /// <summary>The classes in the <c>class</c> attribute.</summary>
+    public IReadOnlySet<string> Classes { get; private set; } = NoClasses;
+
+    public string? Id { get; private set; }
 
     public string Name { get; }
 
@@ -159,26 +171,66 @@ public sealed class HostElement : HostNode
             return;
         }
         _attributes[name] = value;
-        Rebuild();
+        Rebuild(name);
     }
 
     internal void RemoveAttribute(string name)
     {
         if (_handlers.Remove(name)) return;
-        if (_attributes.Remove(name)) Rebuild();
+        if (_attributes.Remove(name)) Rebuild(name);
     }
 
-    private void Rebuild()
+    /// <summary>
+    /// Resolves the style again, and the descendants' too when a class, an id
+    /// or an inherited property changed.
+    /// </summary>
+    internal void Restyle() => Rebuild(null);
+
+    private void Rebuild(string? changed)
     {
-        var style = Style.Default;
+        var previous = Node.Style;
+        ReadIdentity();
+        Node.Style = _styles is null
+            ? StyleResolver.Inherit(this, ApplyOwnAttributes(Style.Default))
+            : StyleResolver.Resolve(this, _styles.Sheets, _styles.Focused);
+
+        if (IsInlineText) Parent?.ClosestElement?.DescendantsChanged(structural: false);
+
+        var affectsDescendants = changed is "class" or "id"
+            || previous.Color != Node.Style.Color
+            || previous.TextStyle != Node.Style.TextStyle;
+        if (affectsDescendants) RestyleDescendants();
+    }
+
+    internal void RestyleDescendants()
+    {
+        foreach (var element in Descendants().OfType<HostElement>())
+        {
+            element.Rebuild(null);
+        }
+    }
+
+    private void ReadIdentity()
+    {
+        Id = _attributes.TryGetValue("id", out var id) ? id?.ToString() : null;
+        Classes = _attributes.TryGetValue("class", out var classes) ? ParseClasses(classes) : NoClasses;
+    }
+
+    /// <summary>
+    /// Applies this element's attributes over <paramref name="style"/>, the
+    /// inline <c>style</c> last, and reads <c>focusable</c> and <c>cursor</c>.
+    /// </summary>
+    internal Style ApplyOwnAttributes(Style style)
+    {
         Focusable = false;
         Cursor = null;
+        string? inline = null;
         foreach (var (name, value) in _attributes)
         {
             switch (name)
             {
                 case "style" when value is string css:
-                    style = StyleParser.ApplyInline(style, css);
+                    inline = css;
                     break;
                 case "focusable":
                     Focusable = IsTrue(value);
@@ -186,8 +238,9 @@ public sealed class HostElement : HostNode
                 case "cursor":
                     Cursor = ParseCursor(value);
                     break;
-                case "paint":
+                case "class":
                 case "id":
+                case "paint":
                 case "key":
                     break;
                 default:
@@ -195,8 +248,25 @@ public sealed class HostElement : HostNode
                     break;
             }
         }
-        Node.Style = style;
-        if (IsInlineText) Parent?.ClosestElement?.DescendantsChanged(structural: false);
+        if (inline is not null) style = StyleParser.ApplyInline(style, inline);
+        return style;
+    }
+
+    private static IReadOnlySet<string> ParseClasses(object? value)
+    {
+        switch (value)
+        {
+            case null:
+                return NoClasses;
+            case string text:
+                var names = text.Split((char[])[' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries);
+                return names.Length == 0 ? NoClasses : new HashSet<string>(names, StringComparer.Ordinal);
+            case IEnumerable<string> many:
+                var set = new HashSet<string>(many.Where(c => !string.IsNullOrWhiteSpace(c)), StringComparer.Ordinal);
+                return set.Count == 0 ? NoClasses : set;
+            default:
+                return ParseClasses(value.ToString());
+        }
     }
 
     private static bool IsTrue(object? value) => value switch

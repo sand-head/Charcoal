@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using SlopTui.Input;
 using SlopTui.Layout;
 using SlopTui.Rendering;
+using SlopTui.Styling;
 using SlopTui.Terminal;
 
 namespace SlopTui.Components;
@@ -43,6 +44,7 @@ public sealed class TuiApp
     private readonly ITerminal _terminal;
     private readonly TuiAppOptions _options;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly StyleContext _styles = new();
     private TerminalRenderer? _renderer;
     private FocusManager? _focus;
     private Screen? _screen;
@@ -64,6 +66,12 @@ public sealed class TuiApp
 
     /// <summary>Services for components to <c>@inject</c>, registered before <see cref="Run{TRoot}"/>.</summary>
     public IServiceCollection Services { get; } = new ServiceCollection();
+
+    /// <summary>The stylesheets in cascade order. Changing them restyles every element.</summary>
+    public IList<Stylesheet> Stylesheets => _styles.Sheets;
+
+    /// <summary>Parses CSS and adds it as the last stylesheet.</summary>
+    public Stylesheet AddStylesheet(string css) => _styles.Sheets.Add(css);
 
     public FocusManager Focus => _focus ?? throw new InvalidOperationException("The app is not running.");
 
@@ -127,8 +135,10 @@ public sealed class TuiApp
     {
         _dispatcher.BindToCurrentThread();
         var provider = Services.BuildServiceProvider();
-        _renderer = new TerminalRenderer(provider, _loggerFactory, _dispatcher, OnException);
-        _focus = new FocusManager(_renderer.Root, NotifyFocusAsync);
+        _renderer = new TerminalRenderer(provider, _loggerFactory, _dispatcher, OnException, _styles);
+        _focus = new FocusManager(_renderer.Root, NotifyFocusAsync, _styles);
+        _focus.Changed += (previous, current) => _renderer.FocusChanged(previous, current);
+        _styles.Sheets.Changed += OnStylesheetsChanged;
         _size = _terminal.Size;
         _screen = new Screen(_size.Width, _size.Height) { SynchronizedOutput = SynchronizedOutput };
 
@@ -149,6 +159,7 @@ public sealed class TuiApp
         }
         finally
         {
+            _styles.Sheets.Changed -= OnStylesheetsChanged;
             _terminal.Stop();
             _terminal.InputReceived -= _pump.Enqueue;
             _terminal.Resized -= OnResized;
@@ -158,6 +169,20 @@ public sealed class TuiApp
 
         if (_failure is not null) throw new TuiAppException(_failure);
         return _exitCode;
+    }
+
+    private void OnStylesheetsChanged()
+    {
+        if (_renderer is null) return;
+        if (_dispatcher.CheckAccess())
+        {
+            _renderer.RestyleAll();
+        }
+        else
+        {
+            _ = _dispatcher.InvokeAsync(_renderer.RestyleAll);
+        }
+        _dispatcher.Signal.Release();
     }
 
     private void OnResized(Size size)

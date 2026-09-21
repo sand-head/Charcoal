@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.RenderTree;
 using Microsoft.Extensions.Logging;
 using SlopTui.Layout;
+using SlopTui.Styling;
 
 namespace SlopTui.Components;
 
@@ -16,15 +17,54 @@ public sealed class TerminalRenderer : Renderer
     private readonly Dictionary<ulong, HostElement> _handlerOwners = [];
     private readonly Action<Exception> _onException;
     private readonly CanvasRegistry? _canvases;
+    private readonly StyleContext? _styles;
 
-    public TerminalRenderer(IServiceProvider services, ILoggerFactory loggerFactory, TerminalDispatcher dispatcher, Action<Exception> onException)
+    public TerminalRenderer(IServiceProvider services, ILoggerFactory loggerFactory, TerminalDispatcher dispatcher, Action<Exception> onException, StyleContext? styles = null)
         : base(services, loggerFactory)
     {
         Dispatcher = dispatcher;
         _onException = onException;
         _canvases = services.GetService(typeof(CanvasRegistry)) as CanvasRegistry;
-        Root = new HostElement("box");
+        _styles = styles;
+        Root = new HostElement("box", _canvases, _styles);
         Root.SetAttribute("flex-direction", "column", 0);
+    }
+
+    public StyleContext? Styles => _styles;
+
+    /// <summary>Resolves every element's style again.</summary>
+    public void RestyleAll()
+    {
+        Root.Restyle();
+        Root.RestyleDescendants();
+        Dirty = true;
+    }
+
+    /// <summary>
+    /// Restyles what <c>:focus</c> and <c>:focus-within</c> can have changed:
+    /// both elements, their ancestors, and whatever lies below them.
+    /// </summary>
+    public void FocusChanged(HostElement? previous, HostElement? current)
+    {
+        if (_styles is null || !_styles.DependsOnFocus) return;
+        foreach (var element in new[] { previous, current })
+        {
+            if (element is not null) RestyleFocusPath(element);
+        }
+        Dirty = true;
+    }
+
+    private void RestyleFocusPath(HostElement element)
+    {
+        // Outermost first, so inherited properties are resolved top down.
+        var path = element.AncestorElements().Reverse().Append(element).ToList();
+        foreach (var node in path)
+        {
+            node.Restyle();
+        }
+
+        var subtree = _styles!.FocusAffectsDescendants ? path[0] : element;
+        subtree.RestyleDescendants();
     }
 
     public override Dispatcher Dispatcher { get; }
@@ -264,7 +304,7 @@ public sealed class TerminalRenderer : Renderer
     private void InsertElement(HostNode parent, int childIndex, ArrayRange<RenderTreeFrame> frames, int frameIndex)
     {
         var frame = frames.Array[frameIndex];
-        var element = new HostElement(frame.ElementName, _canvases);
+        var element = new HostElement(frame.ElementName, _canvases, _styles);
         var end = frameIndex + frame.ElementSubtreeLength;
         var descendant = frameIndex + 1;
         for (; descendant < end; descendant++)

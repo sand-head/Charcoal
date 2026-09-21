@@ -1,0 +1,28 @@
+@using SlopTui.Layout
+@using SlopTui.Rendering
+@*
+    Two focusable panels under a class the app's stylesheet targets. The
+    stylesheet colours the focused panel's text through :focus-within and
+    marks the "hot" panel; the fixture toggles the class from a key.
+*@
+<Box FlexDirection="FlexDirection.Column" class="@RootClass" id="root" @onkeypress="OnKey">
+    <Box class="panel" id="first" focusable="true">
+        <Text id="first-text">first</Text>
+    </Box>
+    <Box class="@("panel" + (Hot ? " hot" : ""))" id="second" focusable="true">
+        <Text id="second-text">second</Text>
+    </Box>
+</Box>
+
+@code {
+    public static StyledFixture? Last;
+    public bool Hot;
+    public string RootClass = "app";
+
+    protected override void OnInitialized() => Last = this;
+
+    private void OnKey(KeyPressEventArgs e)
+    {
+        if (e.Key.Text == "h") { Hot = !Hot; e.Handled = true; }
+    }
+}

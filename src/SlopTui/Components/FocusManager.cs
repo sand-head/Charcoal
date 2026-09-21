@@ -1,3 +1,5 @@
+using SlopTui.Styling;
+
 namespace SlopTui.Components;
 
 /// <summary>
@@ -8,11 +10,13 @@ public sealed class FocusManager
 {
     private readonly HostElement _root;
     private readonly Func<HostElement, bool, Task> _notify;
+    private readonly StyleContext? _styles;
 
-    internal FocusManager(HostElement root, Func<HostElement, bool, Task> notify)
+    internal FocusManager(HostElement root, Func<HostElement, bool, Task> notify, StyleContext? styles = null)
     {
         _root = root;
         _notify = notify;
+        _styles = styles;
     }
 
     public HostElement? Focused { get; private set; }
@@ -34,6 +38,8 @@ public sealed class FocusManager
         if (ReferenceEquals(Focused, element)) return;
         var previous = Focused;
         Focused = element;
+        // Before any handler re-renders, so :focus rules apply to what it renders.
+        if (_styles is not null) _styles.Focused = element;
         if (previous is not null) await _notify(previous, false);
         if (element is not null) await _notify(element, true);
         Changed?.Invoke(previous, element);
@@ -70,6 +76,7 @@ public sealed class FocusManager
         }
         var previous = Focused;
         Focused = null;
+        if (_styles is not null) _styles.Focused = null;
         Changed?.Invoke(previous, null);
     }
 }
