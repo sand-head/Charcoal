@@ -1,0 +1,17 @@
+@using SlopTui.Rendering
+<Text>
+    <Run Color="Color.Red">one</Run>
+    <Run>  two</Run>
+    <Run>@("  three")</Run>
+    @if (Show)
+    {
+        <Run> four</Run>
+    }
+</Text>
+<Text>
+    <Run>a</Run><Newline /><Run>b</Run>
+</Text>
+
+@code {
+    [Parameter] public bool Show { get; set; } = true;
+}

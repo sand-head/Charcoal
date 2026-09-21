@@ -282,7 +282,13 @@ public sealed class HostElement : HostNode
             switch (child)
             {
                 case HostTextNode text:
-                    if (text.Text.Length > 0) into.Add(new TextRun(text.Text, fg, bg, style));
+                    if (text.Text.Length > 0 && !IsMarkupWhitespace(text.Text))
+                    {
+                        into.Add(new TextRun(text.Text, fg, bg, style));
+                    }
+                    break;
+                case HostElement { IsText: true } inline when inline.Attributes.ContainsKey("newline"):
+                    into.Add(new TextRun("\n", fg, bg, style));
                     break;
                 case HostElement { IsText: true } inline:
                     var inlineStyle = inline.Node.Style;
@@ -295,6 +301,24 @@ public sealed class HostElement : HostNode
                     break;
             }
         }
+    }
+
+    /// <summary>Whitespace containing a line break: the indentation between elements on separate lines.</summary>
+    private static bool IsMarkupWhitespace(string text)
+    {
+        var hasLineBreak = false;
+        foreach (var c in text)
+        {
+            if (c is '\n' or '\r')
+            {
+                hasLineBreak = true;
+            }
+            else if (!char.IsWhiteSpace(c))
+            {
+                return false;
+            }
+        }
+        return hasLineBreak;
     }
 
     /// <summary>Paints a canvas with the delegate registered under its <c>paint</c> attribute.</summary>
