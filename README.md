@@ -35,7 +35,9 @@ return new TuiApp().Run<App>();
 ## What you get
 
 - **Razor components.** `Box`, `Text`, `Canvas`, `Spacer`, `Newline`, or the
-  bare `<box>`, `<text>`, `<canvas>` elements with kebab-case attributes.
+  bare `<box>` and `<canvas>` elements with kebab-case attributes. Razor
+  reserves `<text>` inside code blocks such as `@if` and `@foreach`, so use
+  `<Run>`, the same component, there.
   Parameters, `@key`, `EventCallback`, cascading values, `@inject`,
   `StateHasChanged` and `InvokeAsync` work as they do on the web.
 - **Flexbox on cells.** Direction, justify, align, grow/shrink/basis,

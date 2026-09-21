@@ -77,6 +77,15 @@ public sealed class TuiApp
     /// <summary>Raised on the loop thread after every painted frame.</summary>
     public event Action<FrameStats>? FramePainted;
 
+    /// <summary>
+    /// Raised after the tree is painted and before the frame is flushed, to
+    /// draw over everything else.
+    /// </summary>
+    public event Action<CellBuffer>? Overlay;
+
+    /// <summary>The terminal, for raw writes.</summary>
+    public ITerminal Terminal => _terminal;
+
     /// <summary>Timings of the last painted frame.</summary>
     public FrameStats LastFrame { get; private set; }
 
@@ -223,6 +232,7 @@ public sealed class TuiApp
         var paintStart = Stopwatch.GetTimestamp();
         _screen!.Back.Fill(Cell.Blank);
         Painter.Paint(_renderer.Root.Node, _screen.Back);
+        Overlay?.Invoke(_screen.Back);
         PlaceCursor();
 
         var flushStart = Stopwatch.GetTimestamp();
