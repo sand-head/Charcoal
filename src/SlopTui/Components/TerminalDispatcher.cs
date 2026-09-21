@@ -72,7 +72,8 @@ public sealed class TerminalDispatcher : Dispatcher
         return completion.Task;
     }
 
-    private Task Post(Func<Task> work)
+    /// <summary>Queues work for the loop's next step, even when called from the loop thread.</summary>
+    public Task Post(Func<Task> work)
     {
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _queue.Enqueue(async () =>

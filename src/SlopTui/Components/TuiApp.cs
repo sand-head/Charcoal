@@ -136,7 +136,7 @@ public sealed class TuiApp
         _dispatcher.BindToCurrentThread();
         var provider = Services.BuildServiceProvider();
         _renderer = new TerminalRenderer(provider, _loggerFactory, _dispatcher, OnException, _styles);
-        _focus = new FocusManager(_renderer.Root, NotifyFocusAsync, _styles);
+        _focus = new FocusManager(_renderer.Root, NotifyFocusAsync, work => _dispatcher.Post(work), _styles);
         _focus.Changed += (previous, current) => _renderer.FocusChanged(previous, current);
         _styles.Sheets.Changed += OnStylesheetsChanged;
         _size = _terminal.Size;

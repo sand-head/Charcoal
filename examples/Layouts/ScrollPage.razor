@@ -1,11 +1,10 @@
 @* A ScrollBox that is focused when the page appears and follows the lines a timer appends. *@
 @implements IDisposable
-@inject TuiApp Tui
 
 <Box FlexDirection="FlexDirection.Column" FlexGrow="1" Gap="1" Padding="new Edges(0, 1)">
     <Text Dim="true">↑ ↓ PageUp PageDown Home End scroll the box; the wheel too. A line is appended every second; End sticks to the bottom.</Text>
     <Box Gap="1" FlexGrow="1">
-        <ScrollBox @ref="_scroller" FlexGrow="1" Border="BorderStyle.Single" BorderColor="Color.Green" StickToBottom="true" Padding="new Edges(0, 1)" ScrollTopChanged="StateHasChanged">
+        <ScrollBox @ref="_scroller" FlexGrow="1" Border="BorderStyle.Single" BorderColor="Color.Green" StickToBottom="true" Autofocus="true" Padding="new Edges(0, 1)" ScrollTopChanged="StateHasChanged">
             @foreach (var line in _lines)
             {
                 <Run Wrap="TextWrap.Clip" @key="line"><Run Dim="true">@($"{line,4} ")</Run><Run>@Words[line % Words.Length]</Run></Run>
@@ -36,13 +35,6 @@
     {
         _lines.Add(_lines.Count + 1);
         StateHasChanged();
-    }
-
-    protected override void OnAfterRender(bool firstRender)
-    {
-        if (!firstRender) return;
-        var element = Tui.Renderer.Root.Descendants().OfType<HostElement>().FirstOrDefault(e => e.Id is { } id && id.StartsWith("scrollbox-"));
-        if (element is not null) _ = Tui.Focus.FocusAsync(element);
     }
 
     public void Dispose() => _timer?.Dispose();

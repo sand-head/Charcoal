@@ -28,6 +28,9 @@
 
     [Parameter] public bool Focusable { get; set; } = true;
 
+    /// <summary>Takes focus when first shown.</summary>
+    [Parameter] public bool Autofocus { get; set; }
+
     /// <summary>
     /// The first content row to show. Only a changed value moves the box, so
     /// an unbound parent re-rendering does not undo the user's scrolling; read
@@ -89,6 +92,13 @@
     public bool AtEnd => _scroll >= MaxScroll;
 
     protected override void OnInitialized() => Tui.FramePainted += OnFrame;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender || !Autofocus || !Focusable) return;
+        var element = Tui.Renderer.Root.Descendants().OfType<HostElement>().FirstOrDefault(e => e.Id == _id);
+        if (element is not null) _ = Tui.Focus.FocusAsync(element);
+    }
 
     protected override void OnParametersSet()
     {

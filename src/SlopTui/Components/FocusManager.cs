@@ -10,12 +10,14 @@ public sealed class FocusManager
 {
     private readonly HostElement _root;
     private readonly Func<HostElement, bool, Task> _notify;
+    private readonly Action<Func<Task>> _defer;
     private readonly StyleContext? _styles;
 
-    internal FocusManager(HostElement root, Func<HostElement, bool, Task> notify, StyleContext? styles = null)
+    internal FocusManager(HostElement root, Func<HostElement, bool, Task> notify, Action<Func<Task>>? defer = null, StyleContext? styles = null)
     {
         _root = root;
         _notify = notify;
+        _defer = defer ?? (work => _ = work());
         _styles = styles;
     }
 
@@ -33,15 +35,33 @@ public sealed class FocusManager
         && element.AncestorElements().All(a => a.Node.Style.Display != Layout.Display.None);
 
     /// <summary>Moves focus to an element, or clears it, raising blur and then focus.</summary>
-    public async Task FocusAsync(HostElement? element)
+    public Task FocusAsync(HostElement? element)
+    {
+        try
+        {
+            MoveFocus(element);
+            return Task.CompletedTask;
+        }
+        catch (Exception exception)
+        {
+            return Task.FromException(exception);
+        }
+    }
+
+    private void MoveFocus(HostElement? element)
     {
         if (ReferenceEquals(Focused, element)) return;
         var previous = Focused;
         Focused = element;
         // Before any handler re-renders, so :focus rules apply to what it renders.
         if (_styles is not null) _styles.Focused = element;
-        if (previous is not null) await _notify(previous, false);
-        if (element is not null) await _notify(element, true);
+        // Deferred, because focus can be requested from inside a render
+        // callback, and an event raised there would disturb the batch being applied.
+        _defer(async () =>
+        {
+            if (previous is not null) await _notify(previous, false);
+            if (element is not null) await _notify(element, true);
+        });
         Changed?.Invoke(previous, element);
     }
 

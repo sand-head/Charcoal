@@ -251,8 +251,9 @@ public static class FlexLayout
     {
         var style = node.Style;
         var sideBySide = IsRow(style.FlexDirection) == widthAxis && style.FlexWrap == FlexWrap.NoWrap;
-        var innerW = Inner(availW, style.Inset.Horizontal);
-        var innerH = Inner(availH, style.Inset.Vertical);
+        // Children are measured within the box's own explicit size, not the room around it.
+        var innerW = Inner(style.Width.Resolve(availW) ?? availW, style.Inset.Horizontal);
+        var innerH = Inner(style.Height.Resolve(availH) ?? availH, style.Inset.Vertical);
 
         var sum = 0;
         var largest = 0;
