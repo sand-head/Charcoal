@@ -115,4 +115,42 @@ public class StyledComponentsTests
         app.Exit();
         await run;
     }
+
+    private const string CardCss = """
+        .card { color: white; border: single }
+        .card:focus { border-color: bright-green }
+        .card:focus > .heading { color: bright-green }
+        .card .heading { bold: true }
+        """;
+
+    [Fact]
+    public async Task A_focus_rule_with_a_child_combinator_reaches_the_heading_through_the_component_container()
+    {
+        var terminal = new HeadlessTerminal(40, 12);
+        var app = new TuiApp(terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
+        app.AddStylesheet(CardCss);
+        var run = Task.Run(() => app.Run<CardsFixture>());
+        WaitUntil(() => terminal.Writes.Count > 0, "the first frame", run);
+
+        var card1 = ById(app, "card1");
+        var heading1 = ById(app, "heading1");
+        Assert.Equal(Color.White, heading1.Node.Style.Color);
+        Assert.Equal(Color.White, heading1.Runs[0].Foreground);
+
+        // Wait for the whole restyle, which runs on the loop thread after focus moves.
+        terminal.Inject("\t");
+        WaitUntil(() => ReferenceEquals(app.Focus.Focused, card1) && card1.Node.Style.BorderColor == Color.BrightGreen
+            && heading1.Node.Style.Color == Color.BrightGreen, "the first card focused and restyled");
+        Assert.Equal(Color.BrightGreen, heading1.Runs[0].Foreground);
+        WaitUntil(() => terminal.Writes.Any(w => w.Contains(Color.BrightGreen.ToSgr(true))), "a frame painted in bright green");
+
+        terminal.Inject("\t");
+        WaitUntil(() => ReferenceEquals(app.Focus.Focused, ById(app, "card2")) && heading1.Node.Style.Color == Color.White
+            && ById(app, "heading2").Node.Style.Color == Color.BrightGreen, "the second card focused and both restyled");
+        Assert.Equal(Color.White, heading1.Runs[0].Foreground);
+        Assert.Equal(Color.BrightGreen, ById(app, "heading2").Runs[0].Foreground);
+
+        app.Exit();
+        await run;
+    }
 }
