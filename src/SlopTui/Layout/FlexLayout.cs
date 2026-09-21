@@ -1,13 +1,21 @@
 namespace SlopTui.Layout;
 
 /// <summary>
-/// Flexbox on integer cells, as a cached measure pass and an arrange pass.
-/// Each node's rect is its border box in absolute terminal cells.
+/// Flexbox, and grid through <see cref="GridLayout"/>, on integer cells, as a
+/// cached measure pass and an arrange pass. Each node's rect is its border
+/// box in absolute terminal cells.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Constraints are the room left for a node's border box after its margins,
 /// and percentages resolve against that room rather than the parent's whole
 /// content box, so a child never overflows because of its margins.
+/// </para>
+/// <para>
+/// As in CSS, a flex item that does not clip cannot shrink below its content
+/// unless it sets a minimum; an item with hidden or scrolling overflow can
+/// shrink to nothing.
+/// </para>
 /// </remarks>
 public static class FlexLayout
 {
@@ -74,9 +82,7 @@ public static class FlexLayout
         }
         else
         {
-            Size content = node.IsLeaf
-                ? node.MeasureContent(innerWidth, innerHeight)
-                : MeasureChildren(node, innerWidth, innerHeight);
+            var content = MeasureContentBox(node, innerWidth, innerHeight);
             width = explicitWidth ?? content.Width + inset.Horizontal;
             height = explicitHeight ?? content.Height + inset.Vertical;
         }
@@ -86,55 +92,138 @@ public static class FlexLayout
         return new Size(Math.Max(0, width), Math.Max(0, height));
     }
 
+    private static Size MeasureContentBox(LayoutNode node, int? innerWidth, int? innerHeight)
+    {
+        if (node.IsLeaf) return node.MeasureContent(innerWidth, innerHeight);
+        if (node.Style.Display == Display.Grid) return GridLayout.MeasureContent(node, innerWidth, innerHeight);
+        return MeasureChildren(node, innerWidth, innerHeight);
+    }
+
     /// <summary>
-    /// A container's content size from its in-flow children's hypothetical
-    /// sizes, before any growing or shrinking.
+    /// A flex container's content size from its in-flow children's
+    /// hypothetical sizes, line by line when it wraps, before any growing or
+    /// shrinking.
     /// </summary>
     private static Size MeasureChildren(LayoutNode node, int? innerWidth, int? innerHeight)
     {
         var style = node.Style;
         var row = IsRow(style.FlexDirection);
         var gap = row ? style.ColumnGap : style.RowGap;
+        var crossGap = row ? style.RowGap : style.ColumnGap;
+        var innerMain = row ? innerWidth : innerHeight;
 
-        var main = 0;
-        var cross = 0;
-        var count = 0;
-        foreach (var child in node.Children)
+        var items = new List<Item>();
+        foreach (var child in InFlowChildren(node))
         {
-            var cs = child.Style;
-            if (cs.Display == Display.None || cs.Position == Position.Absolute) continue;
-
-            var margin = cs.Margin;
+            var margin = child.Style.Margin;
             var availW = Inner(innerWidth, margin.Horizontal);
             var availH = Inner(innerHeight, margin.Vertical);
-            var hypothetical = Hypothetical(child, row, availW, availH, row ? innerWidth : innerHeight);
             var size = Measure(child, availW, availH);
-            var childCross = row ? size.Height + margin.Vertical : size.Width + margin.Horizontal;
-
-            main += hypothetical + (row ? margin.Horizontal : margin.Vertical);
-            cross = Math.Max(cross, childCross);
-            count++;
+            var hypothetical = Hypothetical(child, row, availW, availH, innerMain);
+            items.Add(new Item
+            {
+                Node = child,
+                Margin = margin,
+                Hypothetical = hypothetical,
+                Main = hypothetical,
+                Cross = row ? size.Height : size.Width,
+            });
         }
-        if (count > 1) main += gap * (count - 1);
+        if (items.Count == 0) return Size.Empty;
+
+        var lines = Lines(items, style.FlexWrap != FlexWrap.NoWrap ? innerMain : null, gap, row);
+        var main = 0;
+        var cross = crossGap * (lines.Count - 1);
+        foreach (var line in lines)
+        {
+            main = Math.Max(main, MainUsed(line, gap, row));
+            cross += Math.Max(0, line.Max(item => item.Cross + CrossMargins(item, row)));
+        }
 
         return row ? new Size(main, cross) : new Size(cross, main);
     }
 
-    /// <summary>The item's flex basis, explicit size or content size, clamped by its min and max.</summary>
+    private static IEnumerable<LayoutNode> InFlowChildren(LayoutNode node) =>
+        node.Children.Where(child => child.Style.Display != Display.None && child.Style.Position != Position.Absolute);
+
+    /// <summary>The item's flex basis, explicit size or content size, clamped by its minimum and maximum.</summary>
     private static int Hypothetical(LayoutNode child, bool row, int? availW, int? availH, int? containerMain)
     {
         var cs = child.Style;
         var availMain = row ? availW : availH;
-        var basis = cs.FlexBasis.Resolve(containerMain)
-            ?? (row ? cs.Width : cs.Height).Resolve(availMain);
+        var basis = cs.FlexBasis.Resolve(containerMain) ?? (row ? cs.Width : cs.Height).Resolve(availMain);
         if (basis is null)
         {
             var measured = Measure(child, availW, availH);
             basis = row ? measured.Width : measured.Height;
         }
-        var min = (row ? cs.MinWidth : cs.MinHeight).Resolve(availMain);
+        var min = MinMain(child, row, availW, availH);
         var max = (row ? cs.MaxWidth : cs.MaxHeight).Resolve(availMain);
         return Math.Max(0, Clamp(basis.Value, min, max));
+    }
+
+    /// <summary>
+    /// The item's minimum main size: its own, else its content's for an item
+    /// that does not clip, capped by its maximum.
+    /// </summary>
+    private static int? MinMain(LayoutNode child, bool row, int? availW, int? availH)
+    {
+        var cs = child.Style;
+        var availMain = row ? availW : availH;
+        var explicitMin = (row ? cs.MinWidth : cs.MinHeight).Resolve(availMain);
+        if (explicitMin is { }) return explicitMin;
+        if (cs.Overflow != Overflow.Visible) return null;
+
+        var content = row ? MinContentWidth(child) : Measure(child, availW, availH).Height;
+        var max = (row ? cs.MaxWidth : cs.MaxHeight).Resolve(availMain);
+        return max is { } limit ? Math.Min(content, limit) : content;
+    }
+
+    /// <summary>The narrowest a node can be without losing content, including its inset.</summary>
+    public static int MinContentWidth(LayoutNode node)
+    {
+        var style = node.Style;
+        if (style.Display == Display.None) return 0;
+        if (style.Width.Unit == LengthUnit.Cells) return Math.Max(0, style.Width.Value);
+
+        int width;
+        if (node.IsLeaf)
+        {
+            width = node.MinContentWidth();
+        }
+        else if (style.Display == Display.Grid)
+        {
+            width = GridLayout.MinContentWidth(node);
+        }
+        else
+        {
+            width = FlexMinContentWidth(node);
+        }
+
+        width += style.Inset.Horizontal;
+        var minWidth = style.MinWidth.Unit == LengthUnit.Cells ? style.MinWidth.Value : (int?)null;
+        var maxWidth = style.MaxWidth.Unit == LengthUnit.Cells ? style.MaxWidth.Value : (int?)null;
+        return Math.Max(0, Clamp(width, minWidth, maxWidth));
+    }
+
+    /// <summary>A row's children side by side, or the widest child when the row wraps or is a column.</summary>
+    private static int FlexMinContentWidth(LayoutNode node)
+    {
+        var style = node.Style;
+        var sum = 0;
+        var widest = 0;
+        var count = 0;
+        foreach (var child in InFlowChildren(node))
+        {
+            var childWidth = MinContentWidth(child) + child.Style.Margin.Horizontal;
+            sum += childWidth;
+            widest = Math.Max(widest, childWidth);
+            count++;
+        }
+
+        var sideBySide = IsRow(style.FlexDirection) && style.FlexWrap == FlexWrap.NoWrap;
+        if (!sideBySide) return widest;
+        return sum + (count > 1 ? style.ColumnGap * (count - 1) : 0);
     }
 
     /// <summary>Gives the node its rect and lays out its subtree inside it.</summary>
@@ -155,6 +244,7 @@ public static class FlexLayout
         node.ArrangeDeferred = false;
         node.HasDeferredChildren = false;
         node.ArrangedVisible = visible;
+        node.ContentSize = Size.Empty;
         if (node.Style.Display == Display.None)
         {
             node.Layout = Rect.Empty;
@@ -167,7 +257,14 @@ public static class FlexLayout
         var paddingBox = rect.Deflate(style.BorderEdges);
         var childVisible = style.Overflow == Overflow.Visible ? visible : visible.Intersect(paddingBox);
 
-        ArrangeFlow(node, content, childVisible);
+        if (style.Display == Display.Grid)
+        {
+            GridLayout.Arrange(node, content, childVisible);
+        }
+        else
+        {
+            ArrangeFlow(node, content, childVisible);
+        }
 
         foreach (var child in node.Children)
         {
@@ -190,7 +287,7 @@ public static class FlexLayout
     }
 
     /// <summary>Arranges a child, or only places it when it is entirely outside the visible region.</summary>
-    private static void ArrangeChild(LayoutNode parent, LayoutNode child, Rect rect, Rect visible)
+    internal static void ArrangeChild(LayoutNode parent, LayoutNode child, Rect rect, Rect visible)
     {
         if (rect.Intersect(visible).IsEmpty && !rect.IsEmpty)
         {
@@ -200,6 +297,13 @@ public static class FlexLayout
             return;
         }
         Arrange(child, rect, visible);
+    }
+
+    /// <summary>How far a clipping box scrolls its in-flow children.</summary>
+    internal static (int X, int Y) ScrollOffset(Style style)
+    {
+        if (style.Overflow == Overflow.Visible) return (0, 0);
+        return (Math.Max(0, style.ScrollX), Math.Max(0, style.ScrollY));
     }
 
     private sealed class Item
@@ -217,96 +321,144 @@ public static class FlexLayout
         public double Shrink;
     }
 
+    private static int MainMargins(Item item, bool row) => row ? item.Margin.Horizontal : item.Margin.Vertical;
+
+    private static int CrossMargins(Item item, bool row) => row ? item.Margin.Vertical : item.Margin.Horizontal;
+
+    /// <summary>The main-axis extent of a line: sizes, margins and gaps.</summary>
+    private static int MainUsed(List<Item> line, int gap, bool row)
+    {
+        var used = line.Count > 1 ? gap * (line.Count - 1) : 0;
+        foreach (var item in line)
+        {
+            used += item.Main + MainMargins(item, row);
+        }
+        return used;
+    }
+
+    /// <summary>
+    /// Breaks items into lines by their hypothetical sizes. Without a limit
+    /// there is one line; otherwise every line takes at least one item.
+    /// </summary>
+    private static List<List<Item>> Lines(List<Item> items, int? mainLimit, int gap, bool row)
+    {
+        if (mainLimit is not { } limit) return [items];
+
+        var lines = new List<List<Item>>();
+        var line = new List<Item>();
+        var used = 0;
+        foreach (var item in items)
+        {
+            var extent = item.Hypothetical + MainMargins(item, row);
+            var needed = line.Count == 0 ? extent : used + gap + extent;
+            if (line.Count > 0 && needed > limit)
+            {
+                lines.Add(line);
+                line = [];
+                needed = extent;
+            }
+            line.Add(item);
+            used = needed;
+        }
+        if (line.Count > 0) lines.Add(line);
+        return lines;
+    }
+
+    /// <summary>
+    /// Sizes the items line by line, spreads the lines across the cross axis,
+    /// then places every item, shifted by the scroll offset.
+    /// </summary>
     private static void ArrangeFlow(LayoutNode node, Rect content, Rect visible)
     {
         var style = node.Style;
         var row = IsRow(style.FlexDirection);
-        var reverse = style.FlexDirection is FlexDirection.RowReverse or FlexDirection.ColumnReverse;
+        var wrap = style.FlexWrap != FlexWrap.NoWrap;
         var gap = row ? style.ColumnGap : style.RowGap;
+        var crossGap = row ? style.RowGap : style.ColumnGap;
         var mainSize = row ? content.Width : content.Height;
         var crossSize = row ? content.Height : content.Width;
 
+        var items = FlexItems(node, content, row, mainSize);
+        if (items.Count == 0) return;
+
+        var lines = Lines(items, wrap ? mainSize : null, gap, row);
+        var lineCross = new int[lines.Count];
+        for (var l = 0; l < lines.Count; l++)
+        {
+            ResolveMainSizes(lines[l], mainSize, gap, row);
+            foreach (var item in lines[l])
+            {
+                item.Cross = CrossSize(item, crossSize, row);
+                lineCross[l] = Math.Max(lineCross[l], item.Cross + CrossMargins(item, row));
+            }
+        }
+
+        int contentCross;
+        var (crossStart, crossBetween) = (0, 0);
+        if (wrap)
+        {
+            contentCross = lineCross.Sum() + crossGap * (lines.Count - 1);
+            (crossStart, crossBetween) = AlignLines(style.AlignContent, lineCross, crossSize - contentCross);
+        }
+        else
+        {
+            // A single line fills the container's cross size, as in CSS.
+            lineCross[0] = crossSize;
+            contentCross = crossSize;
+        }
+
+        var mainContent = wrap ? lines.Max(line => MainUsed(line, gap, row)) : MainUsed(lines[0], gap, row);
+        node.ContentSize = row ? new Size(mainContent, contentCross) : new Size(contentCross, mainContent);
+
+        var placement = new LinePlacement(node, content, visible, row, mainSize, gap, ScrollOffset(style));
+        var crossPosition = crossStart;
+        foreach (var l in LineOrder(lines.Count, style.FlexWrap))
+        {
+            placement.Place(lines[l], crossPosition, lineCross[l]);
+            crossPosition += lineCross[l] + crossGap + crossBetween;
+        }
+    }
+
+    private static IEnumerable<int> LineOrder(int count, FlexWrap wrap)
+    {
+        var order = Enumerable.Range(0, count);
+        return wrap == FlexWrap.WrapReverse ? order.Reverse() : order;
+    }
+
+    private static List<Item> FlexItems(LayoutNode node, Rect content, bool row, int mainSize)
+    {
         var items = new List<Item>();
-        foreach (var child in node.Children)
+        foreach (var child in InFlowChildren(node))
         {
             var cs = child.Style;
-            if (cs.Display == Display.None || cs.Position == Position.Absolute) continue;
             var margin = cs.Margin;
             var availW = Inner(content.Width, margin.Horizontal);
             var availH = Inner(content.Height, margin.Vertical);
-            var availMain = row ? availW : availH;
-            var item = new Item
+            items.Add(new Item
             {
                 Node = child,
                 Margin = margin,
                 Hypothetical = Hypothetical(child, row, availW, availH, mainSize),
-                Min = (row ? cs.MinWidth : cs.MinHeight).Resolve(availMain),
-                Max = (row ? cs.MaxWidth : cs.MaxHeight).Resolve(availMain),
+                Min = MinMain(child, row, availW, availH),
+                Max = (row ? cs.MaxWidth : cs.MaxHeight).Resolve(row ? availW : availH),
                 Grow = Math.Max(0, cs.FlexGrow),
                 Shrink = Math.Max(0, cs.FlexShrink),
-            };
-            items.Add(item);
+            });
         }
-        if (items.Count == 0) return;
-
-        ResolveMainSizes(items, mainSize, gap, row);
-        foreach (var item in items)
-        {
-            item.Cross = CrossSize(item, style.AlignItems, crossSize, row);
-        }
-
-        var used = gap * (items.Count - 1);
-        foreach (var item in items)
-        {
-            used += item.Main + (row ? item.Margin.Horizontal : item.Margin.Vertical);
-        }
-        var free = mainSize - used;
-        var (start, between) = Justify(style.JustifyContent, free, items.Count);
-
-        var position = start;
-        for (var index = 0; index < items.Count; index++)
-        {
-            var item = items[index];
-            var marginStart = row ? item.Margin.Left : item.Margin.Top;
-            var marginEnd = row ? item.Margin.Right : item.Margin.Bottom;
-            var mainPos = position + marginStart;
-            position += marginStart + item.Main + marginEnd + gap + between;
-
-            var align = Align(item.Node.Style.AlignSelf, style.AlignItems);
-            var crossStart = row ? item.Margin.Top : item.Margin.Left;
-            var crossEnd = row ? item.Margin.Bottom : item.Margin.Right;
-            var crossPos = align switch
-            {
-                AlignItems.Center => (crossSize - item.Cross - crossStart - crossEnd) / 2 + crossStart,
-                AlignItems.FlexEnd => crossSize - item.Cross - crossEnd,
-                _ => crossStart,
-            };
-
-            if (reverse) mainPos = mainSize - mainPos - item.Main;
-
-            var childRect = row
-                ? new Rect(content.X + mainPos, content.Y + crossPos, item.Main, item.Cross)
-                : new Rect(content.X + crossPos, content.Y + mainPos, item.Cross, item.Main);
-            ArrangeChild(node, item.Node, childRect, visible);
-        }
+        return items;
     }
 
-    /// <summary>An item's explicit cross size, or the whole line when stretched, or its content's.</summary>
-    private static int CrossSize(Item item, AlignItems alignItems, int lineCross, bool row)
+    /// <summary>An item's explicit cross size, or its content's at its final main size.</summary>
+    private static int CrossSize(Item item, int lineCross, bool row)
     {
         var cs = item.Node.Style;
-        var marginCross = row ? item.Margin.Vertical : item.Margin.Horizontal;
-        var availCross = Math.Max(0, lineCross - marginCross);
+        var availCross = Math.Max(0, lineCross - CrossMargins(item, row));
         var explicitCross = (row ? cs.Height : cs.Width).Resolve(availCross);
 
         int cross;
         if (explicitCross is { } size)
         {
             cross = size;
-        }
-        else if (Align(cs.AlignSelf, alignItems) == AlignItems.Stretch)
-        {
-            cross = availCross;
         }
         else
         {
@@ -322,6 +474,92 @@ public static class FlexLayout
     }
 
     /// <summary>
+    /// Shares leftover cross space between wrapped lines, stretching them in
+    /// place or returning where the first starts and the space between them.
+    /// </summary>
+    private static (int Start, int Between) AlignLines(AlignContent alignContent, int[] lineCross, int leftover)
+    {
+        if (leftover <= 0) return (0, 0);
+        var count = lineCross.Length;
+        switch (alignContent)
+        {
+            case AlignContent.Stretch:
+                var each = leftover / count;
+                var extra = leftover - each * count;
+                for (var l = 0; l < count; l++)
+                {
+                    lineCross[l] += each + (l < extra ? 1 : 0);
+                }
+                return (0, 0);
+            case AlignContent.Center:
+                return (leftover / 2, 0);
+            case AlignContent.FlexEnd:
+                return (leftover, 0);
+            case AlignContent.SpaceBetween when count > 1:
+                return (0, leftover / (count - 1));
+            case AlignContent.SpaceAround:
+                var between = leftover / count;
+                return (between / 2, between);
+            default:
+                return (0, 0);
+        }
+    }
+
+    /// <summary>Places the items of one line within the container's content box.</summary>
+    private sealed class LinePlacement(LayoutNode node, Rect content, Rect visible, bool row, int mainSize, int gap, (int X, int Y) scroll)
+    {
+        private readonly bool _reverse = node.Style.FlexDirection is FlexDirection.RowReverse or FlexDirection.ColumnReverse;
+
+        public void Place(List<Item> line, int crossPosition, int lineCross)
+        {
+            var style = node.Style;
+            var free = mainSize - MainUsed(line, gap, row);
+            var (start, between) = Justify(style.JustifyContent, free, line.Count);
+            var position = start;
+            foreach (var item in line)
+            {
+                var marginStart = row ? item.Margin.Left : item.Margin.Top;
+                var marginEnd = row ? item.Margin.Right : item.Margin.Bottom;
+                var mainPos = position + marginStart;
+                position += marginStart + item.Main + marginEnd + gap + between;
+                if (_reverse) mainPos = mainSize - mainPos - item.Main;
+
+                var align = Align(item.Node.Style.AlignSelf, style.AlignItems);
+                var itemCross = align == AlignItems.Stretch ? StretchedCross(item, lineCross) : item.Cross;
+                var crossPos = crossPosition + CrossOffset(item, align, itemCross, lineCross);
+
+                var childRect = row
+                    ? new Rect(content.X + mainPos - scroll.X, content.Y + crossPos - scroll.Y, item.Main, itemCross)
+                    : new Rect(content.X + crossPos - scroll.X, content.Y + mainPos - scroll.Y, itemCross, item.Main);
+                ArrangeChild(node, item.Node, childRect, visible);
+            }
+        }
+
+        /// <summary>A stretched item fills the line unless it sets its own cross size.</summary>
+        private int StretchedCross(Item item, int lineCross)
+        {
+            var cs = item.Node.Style;
+            if (!(row ? cs.Height : cs.Width).IsAuto) return item.Cross;
+
+            var min = (row ? cs.MinHeight : cs.MinWidth).Resolve(lineCross);
+            var max = (row ? cs.MaxHeight : cs.MaxWidth).Resolve(lineCross);
+            return Math.Max(0, Clamp(lineCross - CrossMargins(item, row), min, max));
+        }
+
+        private int CrossOffset(Item item, AlignItems align, int itemCross, int lineCross)
+        {
+            var marginStart = row ? item.Margin.Top : item.Margin.Left;
+            var marginEnd = row ? item.Margin.Bottom : item.Margin.Right;
+            return align switch
+            {
+                AlignItems.Center => (lineCross - itemCross - marginStart - marginEnd) / 2 + marginStart,
+                AlignItems.FlexEnd => lineCross - itemCross - marginEnd,
+                _ => marginStart,
+            };
+        }
+    }
+
+    /// <summary>
     /// Resolves flexible lengths with the CSS freeze loop, then rounds so the
     /// items fill the container exactly.
     /// </summary>
@@ -331,7 +569,7 @@ public static class FlexLayout
         var hypotheticalSum = 0;
         foreach (var item in items)
         {
-            margins += row ? item.Margin.Horizontal : item.Margin.Vertical;
+            margins += MainMargins(item, row);
             hypotheticalSum += item.Hypothetical;
         }
         var gaps = gap * (items.Count - 1);
@@ -449,7 +687,8 @@ public static class FlexLayout
         return boxStart + marginStart;
     }
 
-    private static (int Start, int Between) Justify(JustifyContent justify, int free, int count)
+    /// <summary>Where a run of items starts and the space between them.</summary>
+    internal static (int Start, int Between) Justify(JustifyContent justify, int free, int count)
     {
         // Overflowing content still aligns to the end or the center, as in CSS;
         // the space-* values fall back to flex-start.
@@ -474,7 +713,7 @@ public static class FlexLayout
         };
     }
 
-    private static AlignItems Align(AlignSelf self, AlignItems items) => self switch
+    internal static AlignItems Align(AlignSelf self, AlignItems items) => self switch
     {
         AlignSelf.Stretch => AlignItems.Stretch,
         AlignSelf.FlexStart => AlignItems.FlexStart,
@@ -486,9 +725,9 @@ public static class FlexLayout
     private static bool IsRow(FlexDirection direction) =>
         direction is FlexDirection.Row or FlexDirection.RowReverse;
 
-    private static int? Inner(int? outer, int inset) => outer is { } o ? Math.Max(0, o - inset) : null;
+    internal static int? Inner(int? outer, int inset) => outer is { } o ? Math.Max(0, o - inset) : null;
 
-    private static int Clamp(int value, int? min, int? max)
+    internal static int Clamp(int value, int? min, int? max)
     {
         if (max is { } hi) value = Math.Min(value, hi);
         if (min is { } lo) value = Math.Max(value, lo);

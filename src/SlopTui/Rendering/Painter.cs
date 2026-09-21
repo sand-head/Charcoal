@@ -6,6 +6,10 @@ namespace SlopTui.Rendering;
 /// Paints an arranged layout tree depth-first, so later siblings paint over
 /// earlier ones. A box without a background lets its parent's show through.
 /// </summary>
+/// <remarks>
+/// Only hidden and scrolling boxes clip their children; text is always
+/// clipped to its own content box.
+/// </remarks>
 public static class Painter
 {
     public static void Paint(LayoutNode root, CellBuffer buffer) => PaintNode(root, buffer);

@@ -81,7 +81,7 @@ public class PainterTests
     {
         var buffer = new CellBuffer(6, 3);
         var child = new TextNode(new Style(), "abcdefgh") { At = new Rect(1, 1, 8, 1) };
-        var parent = Box(new Style { Border = BorderStyle.Single }, new Rect(0, 0, 6, 3), child);
+        var parent = Box(new Style { Border = BorderStyle.Single, Overflow = Overflow.Hidden }, new Rect(0, 0, 6, 3), child);
         Painter.Paint(parent, buffer);
         Assert.Equal("│abcd│", Rows(buffer)[1]);
     }
@@ -101,9 +101,31 @@ public class PainterTests
     {
         var buffer = new CellBuffer(8, 1);
         var child = new TextNode(new Style(), "abcdefgh") { At = new Rect(0, 0, 8, 1) };
-        var parent = Box(new Style(), new Rect(0, 0, 4, 1), child);
+        var parent = Box(new Style { Overflow = Overflow.Hidden }, new Rect(0, 0, 4, 1), child);
         Painter.Paint(parent, buffer);
         Assert.Equal("abcd", Rows(buffer)[0]);
+    }
+
+    [Fact]
+    public void Overflow_scroll_clips_children_to_the_box()
+    {
+        var buffer = new CellBuffer(8, 1);
+        var child = new TextNode(new Style(), "abcdefgh") { At = new Rect(0, 0, 8, 1) };
+        var parent = Box(new Style { Overflow = Overflow.Scroll }, new Rect(0, 0, 4, 1), child);
+        Painter.Paint(parent, buffer);
+        Assert.Equal("abcd", Rows(buffer)[0]);
+    }
+
+    [Fact]
+    public void A_plain_box_lets_a_child_paint_past_it()
+    {
+        // Overflow is visible by default, as in CSS: a child the layout placed
+        // past the box paints there.
+        var buffer = new CellBuffer(8, 1);
+        var child = new TextNode(new Style(), "abcdefgh") { At = new Rect(0, 0, 8, 1) };
+        var parent = Box(new Style(), new Rect(0, 0, 4, 1), child);
+        Painter.Paint(parent, buffer);
+        Assert.Equal("abcdefgh", Rows(buffer)[0]);
     }
 
     [Fact]
@@ -111,8 +133,8 @@ public class PainterTests
     {
         var buffer = new CellBuffer(8, 1);
         var text = new TextNode(new Style(), "abcdefgh") { At = new Rect(0, 0, 8, 1) };
-        var inner = Box(new Style(), new Rect(0, 0, 6, 1), text);
-        var outer = Box(new Style(), new Rect(0, 0, 3, 1), inner);
+        var inner = Box(new Style { Overflow = Overflow.Hidden }, new Rect(0, 0, 6, 1), text);
+        var outer = Box(new Style { Overflow = Overflow.Hidden }, new Rect(0, 0, 3, 1), inner);
         Painter.Paint(outer, buffer);
         Assert.Equal("abc", Rows(buffer)[0]);
     }
