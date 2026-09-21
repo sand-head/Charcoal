@@ -57,6 +57,15 @@ public readonly record struct Track(TrackUnit Unit, double Value)
     };
 }
 
+/// <summary>Grid tracks that format as a template such as <c>1fr 20 auto</c>.</summary>
+public sealed class TrackList : List<Track>
+{
+    public TrackList() { }
+    public TrackList(IEnumerable<Track> tracks) : base(tracks) { }
+
+    public override string ToString() => string.Join(' ', this);
+}
+
 /// <summary>What kind of value a <see cref="Length"/> holds.</summary>
 public enum LengthUnit { Auto, Cells, Percent }
 

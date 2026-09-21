@@ -19,6 +19,21 @@ public static class StyleParser
         ["justify-content"] = (s, v) => s with { JustifyContent = Enum<JustifyContent>(v, "justify-content") },
         ["align-items"] = (s, v) => s with { AlignItems = Enum<AlignItems>(v, "align-items") },
         ["align-self"] = (s, v) => s with { AlignSelf = Enum<AlignSelf>(v, "align-self") },
+        ["flex-wrap"] = (s, v) => s with { FlexWrap = Enum<FlexWrap>(v, "flex-wrap") },
+        ["align-content"] = (s, v) => s with { AlignContent = Enum<AlignContent>(v, "align-content") },
+        ["justify-items"] = (s, v) => s with { JustifyItems = Enum<AlignItems>(v, "justify-items") },
+        ["scroll-x"] = (s, v) => s with { ScrollX = Int(v, "scroll-x") },
+        ["scroll-y"] = (s, v) => s with { ScrollY = Int(v, "scroll-y") },
+        ["grid-template-columns"] = (s, v) => s with { GridTemplateColumns = Tracks(v, "grid-template-columns") },
+        ["grid-template-rows"] = (s, v) => s with { GridTemplateRows = Tracks(v, "grid-template-rows") },
+        ["grid-column"] = GridColumn,
+        ["grid-row"] = GridRow,
+        ["grid-column-start"] = (s, v) => s with { GridColumnStart = NullableInt(v, "grid-column-start") },
+        ["grid-row-start"] = (s, v) => s with { GridRowStart = NullableInt(v, "grid-row-start") },
+        ["grid-column-end"] = (s, v) => s with { GridColumnSpan = SpanFromEnd(v, s.GridColumnStart, "grid-column-end") },
+        ["grid-row-end"] = (s, v) => s with { GridRowSpan = SpanFromEnd(v, s.GridRowStart, "grid-row-end") },
+        ["grid-column-span"] = (s, v) => s with { GridColumnSpan = Math.Max(1, Int(v, "grid-column-span")) },
+        ["grid-row-span"] = (s, v) => s with { GridRowSpan = Math.Max(1, Int(v, "grid-row-span")) },
         ["flex-grow"] = (s, v) => s with { FlexGrow = Number(v, "flex-grow") },
         ["flex-shrink"] = (s, v) => s with { FlexShrink = Number(v, "flex-shrink") },
         ["flex-basis"] = (s, v) => s with { FlexBasis = Len(v, "flex-basis") },
@@ -269,6 +284,153 @@ public static class StyleParser
         var basis = parts.Length > 2 ? Len(parts[2], "flex") : Length.Cells(0);
         return style with { FlexGrow = grow, FlexShrink = shrink, FlexBasis = basis };
     }
+
+    /// <summary>
+    /// A track template such as <c>20 25% 1fr auto</c>, with <c>repeat(n, …)</c> expanded.
+    /// </summary>
+    private static TrackList Tracks(object? value, string name)
+    {
+        switch (value)
+        {
+            case TrackList list: return list;
+            case IReadOnlyList<Track> tracks: return new TrackList(tracks);
+            case Track track: return [track];
+            case int cells: return [Track.Cells(cells)];
+        }
+
+        var text = Text(value);
+        var result = new TrackList();
+        var position = 0;
+        while (position < text.Length)
+        {
+            if (char.IsWhiteSpace(text[position]))
+            {
+                position++;
+            }
+            else if (text.AsSpan(position).StartsWith("repeat(", StringComparison.OrdinalIgnoreCase))
+            {
+                position = ReadRepeat(text, position, result, name, value);
+            }
+            else
+            {
+                var end = position;
+                while (end < text.Length && !char.IsWhiteSpace(text[end])) end++;
+                result.Add(TrackOf(text[position..end], name, value));
+                position = end;
+            }
+        }
+        return result;
+    }
+
+    /// <summary>Expands <c>repeat(n, tracks)</c> into the list and returns the position after it.</summary>
+    private static int ReadRepeat(string text, int start, TrackList into, string name, object? value)
+    {
+        var close = text.IndexOf(')', start);
+        if (close < 0) throw Bad(name, value);
+
+        var arguments = text[(start + "repeat(".Length)..close];
+        var comma = arguments.IndexOf(',');
+        if (comma < 0 || !int.TryParse(arguments[..comma].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var count))
+        {
+            throw Bad(name, value);
+        }
+
+        var tracks = Tracks(arguments[(comma + 1)..], name);
+        for (var n = 0; n < count; n++) into.AddRange(tracks);
+        return close + 1;
+    }
+
+    private static Track TrackOf(string token, string name, object? value)
+    {
+        if (IsAutoKeyword(token)) return Track.Auto;
+        if (token.EndsWith("fr", StringComparison.OrdinalIgnoreCase)
+            && double.TryParse(token[..^2], NumberStyles.Float, CultureInfo.InvariantCulture, out var fraction))
+        {
+            return Track.Fr(fraction);
+        }
+        if (token.EndsWith('%') && double.TryParse(token[..^1], NumberStyles.Float, CultureInfo.InvariantCulture, out var percent))
+        {
+            return Track.Percent(percent);
+        }
+        if (int.TryParse(token, NumberStyles.Integer, CultureInfo.InvariantCulture, out var cells))
+        {
+            return Track.Cells(cells);
+        }
+        throw Bad(name, value);
+    }
+
+    private static Style GridColumn(Style style, object? value)
+    {
+        var (start, span) = Placement(value, "grid-column");
+        return style with { GridColumnStart = start, GridColumnSpan = span };
+    }
+
+    private static Style GridRow(Style style, object? value)
+    {
+        var (start, span) = Placement(value, "grid-row");
+        return style with { GridRowStart = start, GridRowSpan = span };
+    }
+
+    /// <summary>
+    /// A grid placement: <c>2</c>, <c>2 / 4</c>, <c>2 / span 2</c>, <c>span 2</c> or <c>auto</c>.
+    /// </summary>
+    private static (int? Start, int Span) Placement(object? value, string name)
+    {
+        if (value is int line) return (line, 1);
+        var text = Text(value);
+        if (text.Length == 0 || IsAutoKeyword(text)) return (null, 1);
+
+        var parts = text.Split('/', StringSplitOptions.TrimEntries);
+        if (parts.Length > 2) throw Bad(name, value);
+
+        int? start = null;
+        var span = 1;
+        if (TryParseSpan(parts[0], name, out var startSpan))
+        {
+            span = startSpan;
+        }
+        else if (!IsAutoKeyword(parts[0]))
+        {
+            start = Int(parts[0], name);
+        }
+
+        if (parts.Length == 2)
+        {
+            var end = parts[1];
+            if (TryParseSpan(end, name, out var endSpan))
+            {
+                span = endSpan;
+            }
+            else if (!IsAutoKeyword(end))
+            {
+                if (start is not { } first) throw Bad(name, value);
+                span = Math.Max(1, Int(end, name) - first);
+            }
+        }
+        return (start, span);
+    }
+
+    /// <summary>The span implied by an end line and the start line already set.</summary>
+    private static int SpanFromEnd(object? value, int? start, string name)
+    {
+        var text = Text(value);
+        if (TryParseSpan(text, name, out var span)) return span;
+        if (text.Length == 0 || IsAutoKeyword(text)) return 1;
+
+        var line = Int(value, name);
+        if (start is not { } first) throw new FormatException($"'{name}' needs a start line before an end line.");
+        return Math.Max(1, line - first);
+    }
+
+    private static bool TryParseSpan(string text, string name, out int span)
+    {
+        span = 1;
+        if (!text.StartsWith("span ", StringComparison.OrdinalIgnoreCase)) return false;
+        span = Math.Max(1, Int(text["span ".Length..], name));
+        return true;
+    }
+
+    private static bool IsAutoKeyword(string text) => text.Equals("auto", StringComparison.OrdinalIgnoreCase);
 
     private static FormatException Bad(string name, object? value) =>
         new($"'{value}' is not a valid value for '{name}'.");
