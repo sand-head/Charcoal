@@ -51,6 +51,7 @@ public abstract class LayoutNode
         {
             node.LayoutDirty = true;
             node.ArrangeDirty = true;
+            node.MinCache = null;
         }
     }
 
@@ -66,6 +67,9 @@ public abstract class LayoutNode
 
     internal bool HasDeferredChildren { get; set; }
     internal Rect ArrangedVisible { get; set; }
+
+    /// <summary>The automatic minimum per axis for the given constraints; -1 where not yet computed.</summary>
+    internal (int? Width, int? Height, int MinWidth, int MinHeight)? MinCache { get; set; }
 
     internal (int? Width, int? Height, Size Result)? MeasureCache { get; set; }
 

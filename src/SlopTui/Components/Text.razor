@@ -23,6 +23,8 @@
     [Parameter] public Edges? Padding { get; set; }
     [Parameter] public Edges? Margin { get; set; }
     [Parameter] public AlignSelf? AlignSelf { get; set; }
+    [Parameter] public string? GridColumn { get; set; }
+    [Parameter] public string? GridRow { get; set; }
 
     [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
 
@@ -47,12 +49,19 @@
         Put(attributes, "padding", Padding);
         Put(attributes, "margin", Margin);
         Put(attributes, "align-self", AlignSelf);
+        Put(attributes, "grid-column", GridColumn);
+        Put(attributes, "grid-row", GridRow);
         return attributes;
     }
 
     private static void Put<T>(Dictionary<string, object> attributes, string name, T? value) where T : struct
     {
         if (value is { } set) attributes[name] = set;
+    }
+
+    private static void Put(Dictionary<string, object> attributes, string name, string? value)
+    {
+        if (value is not null) attributes[name] = value;
     }
 
     private static void PutFlag(Dictionary<string, object> attributes, string name, bool on)

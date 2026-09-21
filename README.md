@@ -40,10 +40,20 @@ return new TuiApp().Run<App>();
   `<Run>`, the same component, there.
   Parameters, `@key`, `EventCallback`, cascading values, `@inject`,
   `StateHasChanged` and `InvokeAsync` work as they do on the web.
-- **Flexbox on cells.** Direction, justify, align, grow/shrink/basis,
-  percent and auto sizes, min/max, padding, margin, gap, borders, absolute
-  positioning, `display: none`. Layout is cached per node, so a frame only
-  re-measures what changed.
+- **Flexbox and grid on cells.** Direction, wrap, justify, align (items,
+  self, content), grow/shrink/basis, percent and auto sizes, min/max with
+  CSS's content-based automatic minimum, padding, margin, gap, borders,
+  absolute positioning and `display: none`. `display: grid` supports track
+  templates such as `12 1fr auto 25%` and `repeat(3, 1fr)`, explicit
+  placement and spans, auto-placement, gaps and per-cell alignment. Layout
+  is cached per node, so a frame only re-measures what changed.
+- **Scrolling.** `overflow: scroll` with `scroll-x` and `scroll-y`, and a
+  `ScrollBox` component that handles the keyboard and the wheel, binds
+  `ScrollTop`, and can stick to the bottom as content grows.
+- **Stylesheets.** `app.AddStylesheet(css)` supports type, class, id,
+  `:focus` and `:focus-within` selectors, descendant and child combinators,
+  specificity and source order. Inline attributes win, and colour and text
+  flags inherit into nested text.
 - **Text that measures right.** Grapheme clusters and wcwidth, so CJK and
   emoji take two cells and combining marks take none. Wrap, truncate at the
   end, start or middle, or clip.
@@ -64,7 +74,8 @@ Each one under `examples/` is a runnable project:
 | Example | Shows |
 |---|---|
 | `Hello` | The smallest app. |
-| `Layouts` | A gallery of the flexbox subset, page by page. |
+| `Layouts` | A gallery of the layout subset, page by page: flex, wrap, grid, automatic minimums, scrolling. |
+| `Styled` | Cards styled by a stylesheet: classes, ids, `:focus`, inheritance, inline overrides. |
 | `Counter` | State, focus, a timer, key and mouse handlers. |
 | `Picker` | A list with keyboard and mouse selection, rows that skip unchanged renders. |
 | `Transcript` | A streaming, bottom-anchored transcript with a composer, entirely in components; `--bench` prints frame costs for 10,000 lines headless. |

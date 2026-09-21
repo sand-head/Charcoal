@@ -2,9 +2,12 @@
 @inject IServiceProvider Services
 @implements IDisposable
 
-@* The transcript overflows the screen, so the rows around it must not shrink. *@
+@*
+    The transcript clips its overflow, so it is the column that shrinks; the
+    rows around it keep their content's height.
+*@
 <Box FlexDirection="FlexDirection.Column" FlexGrow="1" @onkeypress="OnKey">
-    <Box Padding="new Edges(0, 1)" Gap="2" FlexShrink="0">
+    <Box Padding="new Edges(0, 1)" Gap="2">
         <Text Bold="true" Color="Color.Green">transcript</Text>
         <Text Dim="true">@_lines.Count lines · @(_streaming ? "streaming" : "paused") · F1 pauses · Enter sends · Ctrl+C quits</Text>
     </Box>
@@ -19,7 +22,7 @@
 
     <Composer OnSubmit="Submit" />
 
-    <Box Padding="new Edges(0, 1)" Gap="2" FlexShrink="0">
+    <Box Padding="new Edges(0, 1)" Gap="2">
         <Text Dim="true">frame @Tui.FrameCount</Text>
         <Text Dim="true">layout @Tui.LastFrame.Layout.TotalMilliseconds.ToString("F2") ms</Text>
         <Text Dim="true">paint @Tui.LastFrame.Paint.TotalMilliseconds.ToString("F2") ms</Text>

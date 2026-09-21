@@ -1,0 +1,28 @@
+<Box FlexDirection="FlexDirection.Column" FlexGrow="1" Gap="1" Padding="new Edges(0, 1)">
+    <Panel Title="flex-wrap: wrap · gap 1 · twenty chips in whatever width there is" Color="Color.Cyan">
+        <Box FlexWrap="FlexWrap.Wrap" Gap="1">
+            @for (var i = 1; i <= 20; i++)
+            {
+                <Chip Label="@($"chip {i}")" Background="@ChipColors[i % 3]" Foreground="@(i % 3 == 2 ? Color.Black : Color.White)" />
+            }
+        </Box>
+    </Panel>
+    <Box FlexGrow="1" Gap="1">
+        @foreach (var content in new[] { AlignContent.FlexStart, AlignContent.Center, AlignContent.FlexEnd, AlignContent.SpaceBetween, AlignContent.Stretch })
+        {
+            <Box FlexDirection="FlexDirection.Column" FlexGrow="1" Border="BorderStyle.Single" BorderColor="Color.BrightBlack">
+                <Text Dim="true">@(" align-content " + content)</Text>
+                <Box FlexGrow="1" FlexWrap="FlexWrap.Wrap" AlignContent="content" Gap="1" Padding="new Edges(0, 1)">
+                    @for (var i = 1; i <= 6; i++)
+                    {
+                        <Chip Label="@i.ToString()" Background="@(i % 2 == 0 ? Color.Green : Color.Blue)" Foreground="@(i % 2 == 0 ? Color.Black : Color.White)" />
+                    }
+                </Box>
+            </Box>
+        }
+    </Box>
+</Box>
+
+@code {
+    private static readonly Color[] ChipColors = [Color.Red, Color.Blue, Color.Green];
+}

@@ -1,5 +1,5 @@
 @* A coloured block with a label, for showing where layout put something. *@
-<Box Background="Background" Padding="Padding ?? new Edges(0, 1)" FlexGrow="Grow" FlexBasis="Basis" FlexShrink="Shrink" MaxWidth="MaxWidth" Width="Width">
+<Box Background="Background" Padding="Padding ?? new Edges(0, 1)" FlexGrow="Grow" FlexBasis="Basis" FlexShrink="Shrink" MaxWidth="MaxWidth" Width="Width" GridColumn="@GridColumn" GridRow="@GridRow">
     <Text Color="@(Foreground ?? Color.White)">@Label</Text>
 </Box>
 
@@ -13,4 +13,6 @@
     [Parameter] public Length? Basis { get; set; }
     [Parameter] public Length? MaxWidth { get; set; }
     [Parameter] public Length? Width { get; set; }
+    [Parameter] public string? GridColumn { get; set; }
+    [Parameter] public string? GridRow { get; set; }
 }

@@ -30,7 +30,8 @@ this library.
 | `SlopTui.Rendering` | `Color`, `TextStyle`, `TextRun`, `Cell`, `CellBuffer`, `Screen` (diff → ANSI), `TextWidth`, `TextLayout` (wrapping), `Painter`, `ITextContent`, `ICustomPaint` | `SlopTui.Layout` for `Rect`/`Style` |
 | `SlopTui.Input` | `Key`, `KeyModifiers`, `KeyEvent`, `MouseEvent`, `PasteEvent`, `FocusEvent`, `AnsiKeyParser`, `InputPump` | nothing |
 | `SlopTui.Terminal` | `ITerminal`, `ConsoleTerminal` (Unix termios + Windows VT), `HeadlessTerminal`, `TerminalOptions` | `SlopTui.Layout` for `Size` |
-| `SlopTui.Components` | `TerminalRenderer`, `TerminalDispatcher`, host tree, `TuiApp`, `Box`, `Text`, `Canvas`, `Spacer`, `Newline`, focus, event args, `EventHandlers` | everything above |
+| `SlopTui.Styling` | `Stylesheet`, `Selector`, `StyleResolver`, `StyleContext` — a CSS subset over the same properties | `SlopTui.Layout`, `SlopTui.Components` (the host tree it matches) |
+| `SlopTui.Components` | `TerminalRenderer`, `TerminalDispatcher`, host tree, `TuiApp`, `Box`, `Text`/`Run`, `Canvas`, `ScrollBox`, `Spacer`, `Newline`, focus, event args, `EventHandlers` | everything above |
 
 Rules between the layers:
 
@@ -69,16 +70,21 @@ element attribute values as strings, so every typed value (`Edges`, `Length`,
 `Color`, the enums) has a `ToString` that `StyleParser` reads back. A `bool`
 arrives as itself, and `false` omits the attribute.
 
-**`box`** — a flex container. Layout attributes: `display` (flex|none),
-`flex-direction` (row|column|row-reverse|column-reverse), `justify-content`
+**`box`** — a flex or grid container. Layout attributes: `display`
+(flex|grid|none), `flex-direction` (row|column|row-reverse|column-reverse),
+`flex-wrap` (nowrap|wrap|wrap-reverse), `justify-content`
 (flex-start|center|flex-end|space-between|space-around|space-evenly),
 `align-items` / `align-self` (stretch|flex-start|center|flex-end),
-`flex-grow`, `flex-shrink`, `flex-basis`, `width`, `height`, `min-width`,
-`min-height`, `max-width`, `max-height` (cells, `N%`, or `auto`),
-`padding`, `padding-{top,right,bottom,left}`, `padding-x`, `padding-y`,
-`margin*` likewise, `gap`, `row-gap`, `column-gap`, `overflow`
-(hidden|visible), `position` (relative|absolute), `top`, `right`, `bottom`,
-`left`. Visual attributes: `background` (a colour), `border`
+`align-content` (stretch|flex-start|center|flex-end|space-between|space-around),
+`justify-items` (grid), `flex-grow`, `flex-shrink`, `flex-basis`, the `flex`
+shorthand, `width`, `height`, `min-width`, `min-height`, `max-width`,
+`max-height` (cells, `N%`, or `auto`), `padding`,
+`padding-{top,right,bottom,left}`, `padding-x`, `padding-y`, `margin*`
+likewise, `gap`, `row-gap`, `column-gap`, `overflow` (visible|hidden|scroll),
+`scroll-x`, `scroll-y`, `position` (relative|absolute), `top`, `right`,
+`bottom`, `left`, `grid-template-columns`, `grid-template-rows`,
+`grid-column`, `grid-row`, `grid-{column,row}-{start,end,span}`, plus
+`class` and `id` for stylesheets. Visual attributes: `background` (a colour), `border`
 (none|single|double|round|bold|classic), `border-color`,
 `border-{top,right,bottom,left}` (booleans, default all on when a border is
 set). `style="…"` takes the same properties as inline CSS text.
@@ -103,6 +109,35 @@ Colours: `default`, the sixteen ANSI names (`black … white`,
 Lengths: an integer is cells; `50%` is a percentage of the parent's content
 box on that axis; `auto` means "from content".
 
+## Stylesheets
+
+Styles can be set inline, as attributes or `style="…"`, or for the whole
+app with `TuiApp.AddStylesheet(css)` and the `Stylesheets` list.
+`SlopTui.Styling.Stylesheet.Parse` reads a CSS subset:
+
+- Selectors: a type (`box`, `text`, `canvas`, `*`), `.class`, `#id`,
+  `:focus` (the focused element), `:focus-within` (an ancestor of it), in
+  compounds; the descendant (space) and child (`>`) combinators; lists with
+  commas. Component boundaries are transparent to combinators.
+- Declarations: the same property names the attributes take, kebab-case.
+  An unknown property is kept and reported in `Warnings`; a bad value is a
+  `FormatException` at parse time naming the line, selector and property.
+- The cascade is CSS's: specificity (ids, then classes and pseudo-classes,
+  then types), then sheet order, then rule order, last wins; a selector list
+  contributes the specificity of the selector that matched. The element's
+  own attributes beat every rule, and `style="…"` beats the attributes
+  beside it.
+- Inheritance runs with or without a sheet: a `text` whose colour resolved
+  to `default` takes the nearest ancestor element's non-default colour, and
+  the text-style flags of every ancestor OR in. `wrap` does not inherit;
+  boxes inherit nothing.
+- Elements carry `class` (whitespace-separated) and `id`. A change to
+  either, or to an element's resolved colour or flags, re-resolves its
+  descendants; siblings are left alone. Adding or removing a sheet
+  re-resolves everything. A focus change re-resolves the old and new
+  focus paths, and a focused element's subtree when a sheet has a focus
+  pseudo-class left of a combinator.
+
 ## Layout
 
 Measure/arrange, not a single Yoga pass, because a terminal is integers and
@@ -124,9 +159,33 @@ the subset is small:
 - `display: none` removes a node from flow and paint. `position: absolute`
   removes it from flow and places it by its offsets inside the parent's
   padding box.
-- The automatic minimum size of an item is zero, as in Yoga, rather than
-  CSS's content-based minimum. Use `flex-shrink: 0` on items that must keep
-  their size.
+- **Automatic minimum size.** As in CSS, a flex item with `min-*: auto`
+  cannot shrink below its content, and an item with `overflow: hidden` or
+  `scroll` can shrink to zero. Text's minimum is its longest word across and
+  its height at its width down. A box's minimum is computed through the box:
+  its children's minimums side by side on its main axis, plus gaps and
+  inset, or the largest of them across. So a column holding a clipped
+  transcript has the minimum of its other rows, not of the transcript, and
+  needs no `min-height: 0`. Minimums that do not fit together all hold, and
+  the row overflows.
+- **`flex-wrap`.** `wrap` and `wrap-reverse` form lines from hypothetical
+  sizes, margins and gaps. The flex algorithm runs per line, a line is as
+  tall as its tallest item, `align-content` shares leftover cross space
+  between lines, and `row-gap` separates them.
+- **Grid.** Columns come from `grid-template-columns` (one auto column by
+  default) and rows from `grid-template-rows` plus implicit auto rows.
+  Tracks are cells, `N%`, `Nfr` or `auto`; spanning items only grow the
+  auto and `fr` tracks they cover. Auto-placement is CSS's sparse row-major
+  cursor. `grid-column` and `grid-row` accept `2`, `2 / 4`, `span 2` and
+  `2 / span 2`. `justify-items`, `align-items` and `align-self` place an
+  item in its area, and `align-content` spends leftover height.
+- **Scrolling.** A box with `overflow: scroll` or `hidden` shifts its
+  children by `scroll-x` and `scroll-y` and records its `ContentSize`. The
+  engine does not clamp the offsets; the `ScrollBox` component does, and
+  handles the arrow and page keys, the wheel, `ScrollTop` and
+  `StickToBottom`.
+- A container's cross size is measured with its items at their final main
+  sizes, so a row is as tall as its rewrapped text.
 - When content overflows, `justify-content: flex-end` keeps the end in
   view, `center` overflows both ways, and the `space-*` values fall back to
   flex-start.

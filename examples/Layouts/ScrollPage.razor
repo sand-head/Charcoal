@@ -1,0 +1,49 @@
+@* A ScrollBox that is focused when the page appears and follows the lines a timer appends. *@
+@implements IDisposable
+@inject TuiApp Tui
+
+<Box FlexDirection="FlexDirection.Column" FlexGrow="1" Gap="1" Padding="new Edges(0, 1)">
+    <Text Dim="true">↑ ↓ PageUp PageDown Home End scroll the box; the wheel too. A line is appended every second; End sticks to the bottom.</Text>
+    <Box Gap="1" FlexGrow="1">
+        <ScrollBox @ref="_scroller" FlexGrow="1" Border="BorderStyle.Single" BorderColor="Color.Green" StickToBottom="true" Padding="new Edges(0, 1)" ScrollTopChanged="StateHasChanged">
+            @foreach (var line in _lines)
+            {
+                <Run Wrap="TextWrap.Clip" @key="line"><Run Dim="true">@($"{line,4} ")</Run><Run>@Words[line % Words.Length]</Run></Run>
+            }
+        </ScrollBox>
+        <Box FlexDirection="FlexDirection.Column" Width="30" Gap="1" Border="BorderStyle.Single" BorderColor="Color.BrightBlack" Padding="new Edges(0, 1)">
+            <Text Bold="true">state</Text>
+            <Text Dim="true">position @(_scroller?.Position ?? 0)</Text>
+            <Text Dim="true">max @(_scroller?.MaxScroll ?? 0)</Text>
+            <Text Dim="true">@(_scroller?.AtEnd == true ? "at the end (sticky)" : "scrolled up (unstuck)")</Text>
+            <Text Dim="true">@_lines.Count lines</Text>
+        </Box>
+    </Box>
+</Box>
+
+@code {
+    private static readonly string[] Words = ["the quick brown fox", "jumps over", "the lazy dog", "while the scroll box", "keeps the end in view", "until you scroll up"];
+    private readonly List<int> _lines = Enumerable.Range(1, 40).ToList();
+    private ScrollBox? _scroller;
+    private Timer? _timer;
+
+    protected override void OnInitialized()
+    {
+        _timer = new Timer(_ => InvokeAsync(AppendLine), null, 1000, 1000);
+    }
+
+    private void AppendLine()
+    {
+        _lines.Add(_lines.Count + 1);
+        StateHasChanged();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        var element = Tui.Renderer.Root.Descendants().OfType<HostElement>().FirstOrDefault(e => e.Id is { } id && id.StartsWith("scrollbox-"));
+        if (element is not null) _ = Tui.Focus.FocusAsync(element);
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

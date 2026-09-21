@@ -1,0 +1,30 @@
+@inject TuiApp Tui
+
+<box class="page" @onkeypress="OnKey">
+    <Text class="title">styled with a stylesheet</Text>
+    <Text class="muted">Tab moves focus between the cards; the focused card's border and heading turn green through :focus rules. q quits.</Text>
+    <box class="cards">
+        <box class="card" focusable="true">
+            <Text class="heading">plain card</Text>
+            <Text>Its colour is white because .card says so and text inherits it; its wrapping is wrap because ".card text" says so.</Text>
+        </box>
+        <box class="card warn" focusable="true">
+            <Text class="heading">warning card</Text>
+            <Text>Two classes: .card for the shape, .warn for the yellow border. The :focus rule wins the border while it has focus: same specificity, later in the sheet.</Text>
+        </box>
+        <box class="card" focusable="true" style="border: double">
+            <Text class="heading">inline style</Text>
+            <Text>An inline style attribute beats any rule: this border is double whatever the sheet says.</Text>
+        </box>
+    </box>
+    <Text id="footer">#footer is an id selector, and italic comes from it.</Text>
+</box>
+
+@code {
+    private void OnKey(KeyPressEventArgs e)
+    {
+        if (e.Key.Text != "q") return;
+        Tui.Exit();
+        e.Handled = true;
+    }
+}

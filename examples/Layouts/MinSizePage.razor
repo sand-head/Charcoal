@@ -1,0 +1,27 @@
+@*
+    The header and footer keep their rows because their content is their
+    minimum size; the clipped list between them has none, so it shrinks.
+*@
+<Box FlexDirection="FlexDirection.Column" FlexGrow="1" Gap="1" Padding="new Edges(0, 1)">
+    <Box Gap="1" FlexGrow="1">
+        <Box FlexDirection="FlexDirection.Column" FlexGrow="1" Overflow="Overflow.Hidden" Border="BorderStyle.Round" BorderColor="Color.Cyan">
+            <Text Bold="true" Color="Color.Cyan"> header — a visible row keeps its height</Text>
+            <Box FlexDirection="FlexDirection.Column" FlexGrow="1" Overflow="Overflow.Hidden" JustifyContent="JustifyContent.FlexEnd" Padding="new Edges(0, 1)">
+                @for (var i = 1; i <= 200; i++)
+                {
+                    var n = i;
+                    <Run Wrap="TextWrap.Clip"><Run Dim="true">@($"{n,4} ")</Run><Run>an overflowing list; overflow: hidden makes its minimum zero, so it is the one that shrinks</Run></Run>
+                }
+            </Box>
+            <Text Bold="true" Color="Color.Cyan"> footer — so does this one</Text>
+        </Box>
+        <Box FlexDirection="FlexDirection.Column" Width="34" Border="BorderStyle.Round" BorderColor="Color.Yellow" Padding="new Edges(0, 1)" Gap="1">
+            <Text Bold="true" Color="Color.Yellow">in a row, text shrinks to its longest word</Text>
+            <Box Gap="1">
+                <Box Background="Color.Blue" FlexGrow="1"><Text Color="Color.White" Wrap="TextWrap.Wrap">short words wrap freely here</Text></Box>
+                <Box Background="Color.Red" FlexGrow="1"><Text Color="Color.White" Wrap="TextWrap.Wrap">an unbreakableidentifier holds</Text></Box>
+            </Box>
+            <Text Dim="true" Wrap="TextWrap.Wrap">the red box cannot go narrower than "unbreakableidentifier", so the blue one gives way first.</Text>
+        </Box>
+    </Box>
+</Box>

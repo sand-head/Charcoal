@@ -13,7 +13,11 @@
         case 2: <AlignPage /> break;
         case 3: <GrowPage /> break;
         case 4: <BordersPage /> break;
-        default: <AbsolutePage /> break;
+        case 5: <AbsolutePage /> break;
+        case 6: <WrapPage /> break;
+        case 7: <GridPage /> break;
+        case 8: <MinSizePage /> break;
+        default: <ScrollPage /> break;
     }
 
     <Box Padding="new Edges(0, 1)">
@@ -23,7 +27,7 @@
 
 @code {
     private static readonly string[] Titles =
-        ["row and column", "justify-content", "align-items and stretch", "grow, shrink, basis, percent", "borders, padding, wrapping", "absolute position"];
+        ["row and column", "justify-content", "align-items and stretch", "grow, shrink, basis, percent", "borders, padding, wrapping", "absolute position", "flex-wrap and align-content", "grid", "automatic minimum size", "scrolling"];
 
     private int _page;
 

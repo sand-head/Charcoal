@@ -1,5 +1,5 @@
 @* A one-line editor. The cursor attribute places the terminal's cursor at the caret. *@
-<Box Border="BorderStyle.Round" BorderColor="@(_focused ? Color.Green : Color.BrightBlack)" Padding="new Edges(0, 1)" Gap="1" FlexShrink="0"
+<Box Border="BorderStyle.Round" BorderColor="@(_focused ? Color.Green : Color.BrightBlack)" Padding="new Edges(0, 1)" Gap="1"
      focusable="true" cursor="@($"{2 + _caret},0")" @onkeypress="OnKey" @onpaste="OnPaste" @onfocus="() => _focused = true" @onblur="() => _focused = false">
     <Text Color="Color.Green">❯</Text>
     <Text FlexGrow="1" Wrap="TextWrap.Clip">@_text</Text>

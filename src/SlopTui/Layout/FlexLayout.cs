@@ -100,38 +100,37 @@ public static class FlexLayout
     }
 
     /// <summary>
-    /// A flex container's content size from its in-flow children's
-    /// hypothetical sizes, line by line when it wraps, before any growing or
-    /// shrinking.
+    /// A flex container's content size. A single bounded line is resolved as
+    /// arrange will resolve it, so each item's cross size is measured at the
+    /// main size it will actually get, such as the width a shrunk text wraps at.
     /// </summary>
     private static Size MeasureChildren(LayoutNode node, int? innerWidth, int? innerHeight)
     {
         var style = node.Style;
         var row = IsRow(style.FlexDirection);
+        var wrap = style.FlexWrap != FlexWrap.NoWrap;
         var gap = row ? style.ColumnGap : style.RowGap;
         var crossGap = row ? style.RowGap : style.ColumnGap;
         var innerMain = row ? innerWidth : innerHeight;
 
-        var items = new List<Item>();
-        foreach (var child in InFlowChildren(node))
-        {
-            var margin = child.Style.Margin;
-            var availW = Inner(innerWidth, margin.Horizontal);
-            var availH = Inner(innerHeight, margin.Vertical);
-            var size = Measure(child, availW, availH);
-            var hypothetical = Hypothetical(child, row, availW, availH, innerMain);
-            items.Add(new Item
-            {
-                Node = child,
-                Margin = margin,
-                Hypothetical = hypothetical,
-                Main = hypothetical,
-                Cross = row ? size.Height : size.Width,
-            });
-        }
+        var items = FlexItems(node, innerWidth, innerHeight, row, innerMain);
         if (items.Count == 0) return Size.Empty;
 
-        var lines = Lines(items, style.FlexWrap != FlexWrap.NoWrap ? innerMain : null, gap, row);
+        if (!wrap && innerMain is { } bounded) ResolveMainSizes(items, bounded, gap, row);
+
+        foreach (var item in items)
+        {
+            // Only a row item that was actually resized needs measuring again;
+            // the rest are already cached at their hypothetical size. Heights
+            // stay unconstrained so each item keeps a single cache entry.
+            var resized = row && !wrap && innerMain is { } && item.Main != item.Hypothetical;
+            var size = resized
+                ? Measure(item.Node, item.Main, null)
+                : Measure(item.Node, item.AvailW, null);
+            item.Cross = row ? size.Height : size.Width;
+        }
+
+        var lines = Lines(items, wrap ? innerMain : null, gap, row);
         var main = 0;
         var cross = crossGap * (lines.Count - 1);
         foreach (var line in lines)
@@ -146,7 +145,10 @@ public static class FlexLayout
     private static IEnumerable<LayoutNode> InFlowChildren(LayoutNode node) =>
         node.Children.Where(child => child.Style.Display != Display.None && child.Style.Position != Position.Absolute);
 
-    /// <summary>The item's flex basis, explicit size or content size, clamped by its minimum and maximum.</summary>
+    /// <summary>
+    /// The item's flex basis, explicit size or content size, clamped by its
+    /// explicit minimum and maximum. The automatic minimum is left to shrinking.
+    /// </summary>
     private static int Hypothetical(LayoutNode child, bool row, int? availW, int? availH, int? containerMain)
     {
         var cs = child.Style;
@@ -154,17 +156,17 @@ public static class FlexLayout
         var basis = cs.FlexBasis.Resolve(containerMain) ?? (row ? cs.Width : cs.Height).Resolve(availMain);
         if (basis is null)
         {
-            var measured = Measure(child, availW, availH);
+            var measured = Measure(child, availW, null);
             basis = row ? measured.Width : measured.Height;
         }
-        var min = MinMain(child, row, availW, availH);
+        var min = (row ? cs.MinWidth : cs.MinHeight).Resolve(availMain);
         var max = (row ? cs.MaxWidth : cs.MaxHeight).Resolve(availMain);
         return Math.Max(0, Clamp(basis.Value, min, max));
     }
 
     /// <summary>
-    /// The item's minimum main size: its own, else its content's for an item
-    /// that does not clip, capped by its maximum.
+    /// The item's minimum main size: its own, else the automatic minimum for
+    /// an item that does not clip, capped by its maximum.
     /// </summary>
     private static int? MinMain(LayoutNode child, bool row, int? availW, int? availH)
     {
@@ -174,56 +176,108 @@ public static class FlexLayout
         if (explicitMin is { }) return explicitMin;
         if (cs.Overflow != Overflow.Visible) return null;
 
-        var content = row ? MinContentWidth(child) : Measure(child, availW, availH).Height;
+        var content = AutomaticMinimum(child, row, availW, availH);
         var max = (row ? cs.MaxWidth : cs.MaxHeight).Resolve(availMain);
         return max is { } limit ? Math.Min(content, limit) : content;
     }
 
-    /// <summary>The narrowest a node can be without losing content, including its inset.</summary>
-    public static int MinContentWidth(LayoutNode node)
+    /// <summary>The narrowest a node can be without losing content, as CSS's <c>min-width: auto</c>.</summary>
+    public static int MinContentWidth(LayoutNode node) => AutomaticMinimum(node, true, null, null);
+
+    /// <summary>
+    /// The automatic minimum size of a node on one axis, cached until the
+    /// node is invalidated.
+    /// </summary>
+    /// <remarks>
+    /// A clipping box has none. Otherwise an explicit size is the minimum; a
+    /// leaf answers for itself; a grid is its columns' minimums across and its
+    /// measured height down; a flex box is its children's minimums side by
+    /// side on its main axis, or its largest child's across or when it wraps.
+    /// Computing it through the children rather than from the measured
+    /// content is what keeps a column of chrome around a scrolling transcript
+    /// from being as tall as the transcript.
+    /// </remarks>
+    public static int AutomaticMinimum(LayoutNode node, bool widthAxis, int? availW, int? availH)
+    {
+        if (CachedMinimum(node, availW, availH) is { } cached)
+        {
+            var known = widthAxis ? cached.MinWidth : cached.MinHeight;
+            if (known >= 0) return known;
+        }
+
+        var value = ComputeAutomaticMinimum(node, widthAxis, availW, availH);
+
+        var entry = CachedMinimum(node, availW, availH) ?? (availW, availH, -1, -1);
+        node.MinCache = widthAxis
+            ? (entry.Width, entry.Height, value, entry.MinHeight)
+            : (entry.Width, entry.Height, entry.MinWidth, value);
+        return value;
+    }
+
+    private static (int? Width, int? Height, int MinWidth, int MinHeight)? CachedMinimum(LayoutNode node, int? availW, int? availH)
+    {
+        if (node.MinCache is { } entry && entry.Width == availW && entry.Height == availH) return entry;
+        return null;
+    }
+
+    private static int ComputeAutomaticMinimum(LayoutNode node, bool widthAxis, int? availW, int? availH)
     {
         var style = node.Style;
         if (style.Display == Display.None) return 0;
-        if (style.Width.Unit == LengthUnit.Cells) return Math.Max(0, style.Width.Value);
+        if (style.Overflow != Overflow.Visible) return 0;
 
-        int width;
-        if (node.IsLeaf)
-        {
-            width = node.MinContentWidth();
-        }
-        else if (style.Display == Display.Grid)
-        {
-            width = GridLayout.MinContentWidth(node);
-        }
-        else
-        {
-            width = FlexMinContentWidth(node);
-        }
+        var availOwn = widthAxis ? availW : availH;
+        var explicitSize = (widthAxis ? style.Width : style.Height).Resolve(availOwn);
+        if (explicitSize is { } size) return Math.Max(0, size);
 
-        width += style.Inset.Horizontal;
-        var minWidth = style.MinWidth.Unit == LengthUnit.Cells ? style.MinWidth.Value : (int?)null;
-        var maxWidth = style.MaxWidth.Unit == LengthUnit.Cells ? style.MaxWidth.Value : (int?)null;
-        return Math.Max(0, Clamp(width, minWidth, maxWidth));
+        // A measured height already includes the inset and the clamps.
+        if (!widthAxis && (node.IsLeaf || style.Display == Display.Grid)) return Measure(node, availW, null).Height;
+        if (style.Display == Display.Grid && !node.IsLeaf) return GridLayout.MinContentWidth(node);
+
+        var content = node.IsLeaf ? node.MinContentWidth() : FlexAutomaticMinimum(node, widthAxis, availW, availH);
+        content += widthAxis ? style.Inset.Horizontal : style.Inset.Vertical;
+        content = Clamp(content,
+            (widthAxis ? style.MinWidth : style.MinHeight).Resolve(availOwn),
+            (widthAxis ? style.MaxWidth : style.MaxHeight).Resolve(availOwn));
+        return Math.Max(0, content);
     }
 
-    /// <summary>A row's children side by side, or the widest child when the row wraps or is a column.</summary>
-    private static int FlexMinContentWidth(LayoutNode node)
+    /// <summary>
+    /// The children's minimums side by side on the main axis, or the largest
+    /// of them across or when the box wraps, since wrapped items can move to
+    /// another line.
+    /// </summary>
+    private static int FlexAutomaticMinimum(LayoutNode node, bool widthAxis, int? availW, int? availH)
     {
         var style = node.Style;
+        var sideBySide = IsRow(style.FlexDirection) == widthAxis && style.FlexWrap == FlexWrap.NoWrap;
+        var innerW = Inner(availW, style.Inset.Horizontal);
+        var innerH = Inner(availH, style.Inset.Vertical);
+
         var sum = 0;
-        var widest = 0;
+        var largest = 0;
         var count = 0;
         foreach (var child in InFlowChildren(node))
         {
-            var childWidth = MinContentWidth(child) + child.Style.Margin.Horizontal;
-            sum += childWidth;
-            widest = Math.Max(widest, childWidth);
+            var margin = child.Style.Margin;
+            var childMinimum = ChildMinimum(child, widthAxis, Inner(innerW, margin.Horizontal), Inner(innerH, margin.Vertical))
+                + (widthAxis ? margin.Horizontal : margin.Vertical);
+            sum += childMinimum;
+            largest = Math.Max(largest, childMinimum);
             count++;
         }
 
-        var sideBySide = IsRow(style.FlexDirection) && style.FlexWrap == FlexWrap.NoWrap;
-        if (!sideBySide) return widest;
-        return sum + (count > 1 ? style.ColumnGap * (count - 1) : 0);
+        if (!sideBySide) return largest;
+        var gap = widthAxis ? style.ColumnGap : style.RowGap;
+        return sum + (count > 1 ? gap * (count - 1) : 0);
+    }
+
+    /// <summary>A child's explicit minimum, or else its automatic one.</summary>
+    private static int ChildMinimum(LayoutNode child, bool widthAxis, int? availW, int? availH)
+    {
+        var cs = child.Style;
+        var explicitMin = (widthAxis ? cs.MinWidth : cs.MinHeight).Resolve(widthAxis ? availW : availH);
+        return explicitMin ?? AutomaticMinimum(child, widthAxis, availW, availH);
     }
 
     /// <summary>Gives the node its rect and lays out its subtree inside it.</summary>
@@ -310,15 +364,29 @@ public static class FlexLayout
     {
         public required LayoutNode Node;
         public required Edges Margin;
+        public int? AvailW;
+        public int? AvailH;
         public int Hypothetical;
         public double Target;
         public int Main;
         public int Cross;
         public bool Frozen;
-        public int? Min;
         public int? Max;
         public double Grow;
         public double Shrink;
+        private int? _min;
+        private bool _minKnown;
+
+        /// <summary>The minimum main size, computed on first use since only shrinking needs it.</summary>
+        public int? Min(bool row)
+        {
+            if (!_minKnown)
+            {
+                _min = MinMain(Node, row, AvailW, AvailH);
+                _minKnown = true;
+            }
+            return _min;
+        }
     }
 
     private static int MainMargins(Item item, bool row) => row ? item.Margin.Horizontal : item.Margin.Vertical;
@@ -378,7 +446,7 @@ public static class FlexLayout
         var mainSize = row ? content.Width : content.Height;
         var crossSize = row ? content.Height : content.Width;
 
-        var items = FlexItems(node, content, row, mainSize);
+        var items = FlexItems(node, content.Width, content.Height, row, mainSize);
         if (items.Count == 0) return;
 
         var lines = Lines(items, wrap ? mainSize : null, gap, row);
@@ -425,21 +493,24 @@ public static class FlexLayout
         return wrap == FlexWrap.WrapReverse ? order.Reverse() : order;
     }
 
-    private static List<Item> FlexItems(LayoutNode node, Rect content, bool row, int mainSize)
+    private static List<Item> FlexItems(LayoutNode node, int? innerWidth, int? innerHeight, bool row, int? innerMain)
     {
         var items = new List<Item>();
         foreach (var child in InFlowChildren(node))
         {
             var cs = child.Style;
             var margin = cs.Margin;
-            var availW = Inner(content.Width, margin.Horizontal);
-            var availH = Inner(content.Height, margin.Vertical);
+            var availW = Inner(innerWidth, margin.Horizontal);
+            var availH = Inner(innerHeight, margin.Vertical);
+            var hypothetical = Hypothetical(child, row, availW, availH, innerMain);
             items.Add(new Item
             {
                 Node = child,
                 Margin = margin,
-                Hypothetical = Hypothetical(child, row, availW, availH, mainSize),
-                Min = MinMain(child, row, availW, availH),
+                AvailW = availW,
+                AvailH = availH,
+                Hypothetical = hypothetical,
+                Main = hypothetical,
                 Max = (row ? cs.MaxWidth : cs.MaxHeight).Resolve(row ? availW : availH),
                 Grow = Math.Max(0, cs.FlexGrow),
                 Shrink = Math.Max(0, cs.FlexShrink),
@@ -463,8 +534,8 @@ public static class FlexLayout
         else
         {
             var measured = row
-                ? Measure(item.Node, item.Main, availCross)
-                : Measure(item.Node, availCross, item.Main);
+                ? Measure(item.Node, item.Main, null)
+                : Measure(item.Node, availCross, null);
             cross = row ? measured.Height : measured.Width;
         }
 
@@ -605,7 +676,8 @@ public static class FlexLayout
             var violated = false;
             foreach (var item in unfrozen)
             {
-                var clamped = Math.Max(0, Clamp(item.Target, item.Min, item.Max));
+                // A growing item is already above its minimum.
+                var clamped = Math.Max(0, Clamp(item.Target, growing ? null : item.Min(row), item.Max));
                 if (Math.Abs(clamped - item.Target) > Epsilon)
                 {
                     item.Target = clamped;
