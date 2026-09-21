@@ -16,6 +16,7 @@ public static class Painter
         if (style.Display == Display.None) return;
         var rect = node.Layout;
         if (rect.IsEmpty) return;
+        if (rect.Intersect(buffer.Clip).IsEmpty) return;
 
         if (style.Background != Color.Default) buffer.Fill(rect, Cell.Space(style.Color, style.Background));
         if (style.Border != BorderStyle.None) Borders.Draw(buffer, rect, style);

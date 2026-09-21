@@ -1,0 +1,16 @@
+@* A coloured block with a label, for showing where layout put something. *@
+<Box Background="Background" Padding="Padding ?? new Edges(0, 1)" FlexGrow="Grow" FlexBasis="Basis" FlexShrink="Shrink" MaxWidth="MaxWidth" Width="Width">
+    <Text Color="@(Foreground ?? Color.White)">@Label</Text>
+</Box>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public Color Background { get; set; } = Color.Blue;
+    [Parameter] public Color? Foreground { get; set; }
+    [Parameter] public Edges? Padding { get; set; }
+    [Parameter] public double? Grow { get; set; }
+    [Parameter] public double? Shrink { get; set; }
+    [Parameter] public Length? Basis { get; set; }
+    [Parameter] public Length? MaxWidth { get; set; }
+    [Parameter] public Length? Width { get; set; }
+}

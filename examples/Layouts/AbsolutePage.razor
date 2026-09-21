@@ -1,0 +1,8 @@
+<Box FlexGrow="1" Padding="new Edges(0, 1)">
+    <Box FlexGrow="1" Border="BorderStyle.Single" BorderColor="Color.BrightBlack">
+        <Text Dim="true"> absolute children are placed in the padding box of the parent</Text>
+        <Box Position="Position.Absolute" Top="2" Left="4" Border="BorderStyle.Round" Padding="new Edges(0, 1)" Background="Color.Blue"><Text Color="Color.White">top 2 left 4</Text></Box>
+        <Box Position="Position.Absolute" Bottom="1" Right="2" Border="BorderStyle.Round" Padding="new Edges(0, 1)" Background="Color.Green"><Text Color="Color.Black">bottom 1 right 2</Text></Box>
+        <Box Position="Position.Absolute" Top="6" Left="20" Right="20" Border="BorderStyle.Double" Padding="new Edges(0, 1)" Background="Color.Red" JustifyContent="JustifyContent.Center"><Text Color="Color.White">left 20 right 20 stretches</Text></Box>
+    </Box>
+</Box>

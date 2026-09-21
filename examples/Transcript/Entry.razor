@@ -1,0 +1,22 @@
+@* One transcript line, re-rendered only when its text changes. *@
+<Box Gap="1" FlexShrink="0">
+    <Text Dim="true" Color="@(IsUser ? Color.Cyan : Color.Green)">@(IsUser ? "you  " : "agent")</Text>
+    <Text FlexGrow="1" Wrap="TextWrap.Wrap">@Line.Text</Text>
+</Box>
+
+@code {
+    [Parameter, EditorRequired] public App.Line Line { get; set; } = default!;
+
+    private int _renderedVersion = -1;
+    private App.Line? _renderedLine;
+
+    private bool IsUser => Line.Speaker == App.Speaker.User;
+
+    protected override bool ShouldRender()
+    {
+        if (ReferenceEquals(_renderedLine, Line) && _renderedVersion == Line.Version) return false;
+        _renderedLine = Line;
+        _renderedVersion = Line.Version;
+        return true;
+    }
+}

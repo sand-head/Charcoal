@@ -1,0 +1,45 @@
+@inject TuiApp Tui
+@implements IDisposable
+
+<Box FlexDirection="FlexDirection.Column" Padding="new Edges(1, 2)" Gap="1" @onkeypress="OnKey">
+    <Text Bold="true">counters · Tab moves focus · + and − change · click focuses · q quits</Text>
+    <Box Gap="2">
+        @foreach (var counter in _counters)
+        {
+            <CounterBox @key="counter.Name" Model="counter" />
+        }
+    </Box>
+    <Text Dim="true">uptime @_uptime.ToString(@"mm\:ss") · frame @Tui.FrameCount · last frame @Tui.LastFrame.Total.TotalMilliseconds.ToString("F2") ms, @Tui.LastFrame.Bytes bytes</Text>
+</Box>
+
+@code {
+    private readonly CounterModel[] _counters = [new("apples"), new("pears"), new("plums")];
+    private readonly DateTime _started = DateTime.UtcNow;
+    private TimeSpan _uptime;
+    private Timer? _timer;
+
+    protected override void OnInitialized()
+    {
+        // The timer fires on a pool thread; InvokeAsync moves the update onto the app loop.
+        _timer = new Timer(_ => InvokeAsync(() =>
+        {
+            _uptime = DateTime.UtcNow - _started;
+            StateHasChanged();
+        }), null, 1000, 1000);
+    }
+
+    private void OnKey(KeyPressEventArgs e)
+    {
+        if (e.Key.Text != "q") return;
+        Tui.Exit();
+        e.Handled = true;
+    }
+
+    public void Dispose() => _timer?.Dispose();
+
+    public sealed class CounterModel(string name)
+    {
+        public string Name { get; } = name;
+        public int Value { get; set; }
+    }
+}

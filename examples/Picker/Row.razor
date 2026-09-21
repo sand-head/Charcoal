@@ -1,0 +1,35 @@
+@* A row that only re-renders when its label or selection changes. *@
+<Box Padding="new Edges(0, 1)" Background="@(Selected ? Color.Cyan : Color.Default)" @onclick="OnClick" @onmouse="OnMouse">
+    <Text Color="@(Selected ? Color.Black : Color.Default)" Bold="Selected">@(Selected ? "▸ " : "  ")@Label</Text>
+</Box>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public EventCallback OnPick { get; set; }
+    [Parameter] public EventCallback OnHover { get; set; }
+
+    private string? _renderedLabel;
+    private bool _renderedSelected;
+
+    protected override bool ShouldRender()
+    {
+        if (_renderedLabel == Label && _renderedSelected == Selected) return false;
+        _renderedLabel = Label;
+        _renderedSelected = Selected;
+        return true;
+    }
+
+    private Task OnClick(MouseEventArgs e)
+    {
+        e.Handled = true;
+        return OnPick.InvokeAsync();
+    }
+
+    private Task OnMouse(MouseEventArgs e)
+    {
+        if (e.Mouse.Action != MouseAction.Moved) return Task.CompletedTask;
+        e.Handled = true;
+        return OnHover.InvokeAsync();
+    }
+}

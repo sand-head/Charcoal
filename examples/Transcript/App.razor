@@ -1,0 +1,126 @@
+@inject TuiApp Tui
+@inject IServiceProvider Services
+@implements IDisposable
+
+@* The transcript overflows the screen, so the rows around it must not shrink. *@
+<Box FlexDirection="FlexDirection.Column" FlexGrow="1" @onkeypress="OnKey">
+    <Box Padding="new Edges(0, 1)" Gap="2" FlexShrink="0">
+        <Text Bold="true" Color="Color.Green">transcript</Text>
+        <Text Dim="true">@_lines.Count lines · @(_streaming ? "streaming" : "paused") · F1 pauses · Enter sends · Ctrl+C quits</Text>
+    </Box>
+
+    @* FlexEnd anchors the newest line to the bottom. *@
+    <Box FlexDirection="FlexDirection.Column" FlexGrow="1" JustifyContent="JustifyContent.FlexEnd" Overflow="Overflow.Hidden" Padding="new Edges(0, 1)">
+        @foreach (var line in _lines)
+        {
+            <Entry @key="line.Id" Line="line" />
+        }
+    </Box>
+
+    <Composer OnSubmit="Submit" />
+
+    <Box Padding="new Edges(0, 1)" Gap="2" FlexShrink="0">
+        <Text Dim="true">frame @Tui.FrameCount</Text>
+        <Text Dim="true">layout @Tui.LastFrame.Layout.TotalMilliseconds.ToString("F2") ms</Text>
+        <Text Dim="true">paint @Tui.LastFrame.Paint.TotalMilliseconds.ToString("F2") ms</Text>
+        <Text Dim="true">flush @Tui.LastFrame.Flush.TotalMilliseconds.ToString("F2") ms</Text>
+        <Text Dim="true">@Tui.LastFrame.Bytes bytes</Text>
+    </Box>
+</Box>
+
+@code {
+    [Parameter] public int Preload { get; set; } = 2000;
+    [Parameter] public bool Streaming { get; set; } = true;
+
+    private readonly List<Line> _lines = [];
+    private readonly Random _random = new(7);
+    private bool _streaming;
+    private Timer? _timer;
+    private int _wordsLeft;
+
+    private static readonly string[] Words =
+        "the quick brown fox jumps over the lazy dog while a component tree of ten thousand lines stays cheap because only what changed is measured painted and flushed".Split(' ');
+
+    protected override void OnInitialized()
+    {
+        for (var i = 0; i < Preload; i++)
+        {
+            var speaker = i % 7 == 0 ? Speaker.User : Speaker.Agent;
+            _lines.Add(new Line(i, speaker, Sentence(_random.Next(4, 30))));
+        }
+        (Services.GetService(typeof(AppHandle)) as AppHandle)?.Register(this);
+        if (Streaming) StartStreaming();
+    }
+
+    private void StartStreaming()
+    {
+        _streaming = true;
+        _timer ??= new Timer(_ => InvokeAsync(StreamOnce), null, 60, 60);
+    }
+
+    private void StopStreaming()
+    {
+        _streaming = false;
+        _timer?.Dispose();
+        _timer = null;
+    }
+
+    /// <summary>Appends a word to the last agent line, or starts a new line.</summary>
+    public void StreamOnce()
+    {
+        if (_wordsLeft <= 0 || _lines.Count == 0 || _lines[^1].Speaker != Speaker.Agent)
+        {
+            _lines.Add(new Line(_lines.Count, Speaker.Agent, ""));
+            _wordsLeft = _random.Next(6, 40);
+        }
+        var last = _lines[^1];
+        var separator = last.Text.Length == 0 ? "" : " ";
+        last.Append(separator + RandomWord());
+        _wordsLeft--;
+        StateHasChanged();
+    }
+
+    private string RandomWord() => Words[_random.Next(Words.Length)];
+
+    private string Sentence(int words) => string.Join(' ', Enumerable.Range(0, words).Select(_ => RandomWord()));
+
+    private void Submit(string text)
+    {
+        _lines.Add(new Line(_lines.Count, Speaker.User, text));
+        _wordsLeft = 0;
+    }
+
+    private void OnKey(KeyPressEventArgs e)
+    {
+        if (e.Key.Key != Key.F1) return;
+
+        if (_streaming)
+        {
+            StopStreaming();
+        }
+        else
+        {
+            StartStreaming();
+        }
+        e.Handled = true;
+    }
+
+    public void Dispose() => _timer?.Dispose();
+
+    public enum Speaker { User, Agent }
+
+    /// <summary>A transcript line whose version changes with its text.</summary>
+    public sealed class Line(int id, Speaker speaker, string text)
+    {
+        public int Id { get; } = id;
+        public Speaker Speaker { get; } = speaker;
+        public string Text { get; private set; } = text;
+        public int Version { get; private set; }
+
+        public void Append(string more)
+        {
+            Text += more;
+            Version++;
+        }
+    }
+}

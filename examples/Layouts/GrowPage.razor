@@ -1,0 +1,22 @@
+<Box FlexDirection="FlexDirection.Column" FlexGrow="1" Gap="1" Padding="new Edges(0, 1)">
+    <Panel Title="flex-grow 1 : 2 : 1" Color="Color.Yellow">
+        <Box Gap="1">
+            <Chip Label="grow 1" Grow="1" />
+            <Chip Label="grow 2" Grow="2" Background="Color.Green" Foreground="Color.Black" />
+            <Chip Label="grow 1" Grow="1" Background="Color.Red" />
+        </Box>
+    </Panel>
+    <Panel Title="width 25% · width 50% · the rest" Color="Color.Yellow">
+        <Box>
+            <Chip Label="25%" Width="Length.Percent(25)" />
+            <Chip Label="50%" Width="Length.Percent(50)" Background="Color.Green" Foreground="Color.Black" />
+            <Chip Label="rest" Grow="1" Background="Color.Red" />
+        </Box>
+    </Panel>
+    <Panel Title="basis 20 with max-width 30, and one that shrinks from 60" Color="Color.Yellow">
+        <Box Gap="1">
+            <Chip Label="basis 20, grow, max 30" Basis="20" Grow="1" MaxWidth="30" />
+            <Chip Label="basis 60, shrinks" Basis="60" Shrink="1" Background="Color.Green" Foreground="Color.Black" />
+        </Box>
+    </Panel>
+</Box>

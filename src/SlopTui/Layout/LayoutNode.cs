@@ -38,13 +38,25 @@ public abstract class LayoutNode
     /// <summary>Marks this node and its ancestors for re-measuring; siblings keep their cache.</summary>
     public void InvalidateLayout()
     {
-        for (var node = this; node is not null && !node.LayoutDirty; node = node.LayoutParent)
+        for (var node = this; node is not null && !(node.LayoutDirty && node.ArrangeDirty); node = node.LayoutParent)
         {
             node.LayoutDirty = true;
+            node.ArrangeDirty = true;
         }
     }
 
     internal bool LayoutDirty { get; set; } = true;
+
+    internal bool ArrangeDirty { get; set; } = true;
+
+    /// <summary>
+    /// Set when the node was placed off screen and its subtree left unarranged,
+    /// so the next arrange that finds it visible must not skip it.
+    /// </summary>
+    internal bool ArrangeDeferred { get; set; }
+
+    internal bool HasDeferredChildren { get; set; }
+    internal Rect ArrangedVisible { get; set; }
 
     internal (int? Width, int? Height, Size Result)? MeasureCache { get; set; }
 

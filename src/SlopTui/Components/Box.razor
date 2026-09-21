@@ -1,0 +1,72 @@
+@* A flex container. Unset parameters leave the element's defaults. *@
+<box @attributes="Attributes()">@ChildContent</box>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public FlexDirection? FlexDirection { get; set; }
+    [Parameter] public JustifyContent? JustifyContent { get; set; }
+    [Parameter] public AlignItems? AlignItems { get; set; }
+    [Parameter] public AlignSelf? AlignSelf { get; set; }
+    [Parameter] public double? FlexGrow { get; set; }
+    [Parameter] public double? FlexShrink { get; set; }
+    [Parameter] public Length? FlexBasis { get; set; }
+    [Parameter] public Length? Width { get; set; }
+    [Parameter] public Length? Height { get; set; }
+    [Parameter] public Length? MinWidth { get; set; }
+    [Parameter] public Length? MinHeight { get; set; }
+    [Parameter] public Length? MaxWidth { get; set; }
+    [Parameter] public Length? MaxHeight { get; set; }
+    [Parameter] public Edges? Padding { get; set; }
+    [Parameter] public Edges? Margin { get; set; }
+    [Parameter] public int? Gap { get; set; }
+    [Parameter] public Overflow? Overflow { get; set; }
+    [Parameter] public Display? Display { get; set; }
+    [Parameter] public Position? Position { get; set; }
+    [Parameter] public int? Top { get; set; }
+    [Parameter] public int? Right { get; set; }
+    [Parameter] public int? Bottom { get; set; }
+    [Parameter] public int? Left { get; set; }
+    [Parameter] public Color? Background { get; set; }
+    [Parameter] public BorderStyle? Border { get; set; }
+    [Parameter] public Color? BorderColor { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private Dictionary<string, object> Attributes()
+    {
+        var attributes = new Dictionary<string, object>(AdditionalAttributes ?? new Dictionary<string, object>(), StringComparer.Ordinal);
+        Put(attributes, "flex-direction", FlexDirection);
+        Put(attributes, "justify-content", JustifyContent);
+        Put(attributes, "align-items", AlignItems);
+        Put(attributes, "align-self", AlignSelf);
+        Put(attributes, "flex-grow", FlexGrow);
+        Put(attributes, "flex-shrink", FlexShrink);
+        Put(attributes, "flex-basis", FlexBasis);
+        Put(attributes, "width", Width);
+        Put(attributes, "height", Height);
+        Put(attributes, "min-width", MinWidth);
+        Put(attributes, "min-height", MinHeight);
+        Put(attributes, "max-width", MaxWidth);
+        Put(attributes, "max-height", MaxHeight);
+        Put(attributes, "padding", Padding);
+        Put(attributes, "margin", Margin);
+        Put(attributes, "gap", Gap);
+        Put(attributes, "overflow", Overflow);
+        Put(attributes, "display", Display);
+        Put(attributes, "position", Position);
+        Put(attributes, "top", Top);
+        Put(attributes, "right", Right);
+        Put(attributes, "bottom", Bottom);
+        Put(attributes, "left", Left);
+        Put(attributes, "background", Background);
+        Put(attributes, "border", Border);
+        Put(attributes, "border-color", BorderColor);
+        return attributes;
+    }
+
+    private static void Put<T>(Dictionary<string, object> attributes, string name, T? value) where T : struct
+    {
+        if (value is { } set) attributes[name] = set;
+    }
+}

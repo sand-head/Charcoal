@@ -1,0 +1,52 @@
+@inject TuiApp Tui
+
+<Box FlexDirection="FlexDirection.Column" Padding="new Edges(1, 2)" Gap="1" focusable="true" @onkeypress="OnKey">
+    <Text Bold="true">pick a fruit · ↑ ↓ j k move · Enter or click picks · q quits</Text>
+    <Box FlexDirection="FlexDirection.Column" Border="BorderStyle.Single" BorderColor="Color.BrightBlack" Width="40">
+        @for (var i = 0; i < Fruits.Length; i++)
+        {
+            var index = i;
+            <Row @key="Fruits[index]" Label="@Fruits[index]" Selected="index == _selected" OnPick="() => Pick(index)" OnHover="() => _selected = index" />
+        }
+    </Box>
+    <Text>@(_picked is null ? "nothing picked yet" : $"you picked {_picked}")</Text>
+</Box>
+
+@code {
+    private static readonly string[] Fruits = ["apple", "banana", "cherry", "date", "elderberry", "fig", "grape", "honeydew"];
+    private int _selected;
+    private string? _picked;
+
+    private void OnKey(KeyPressEventArgs e)
+    {
+        e.Handled = true;
+        if (e.Key.Key == Key.Up || e.Key.Text == "k")
+        {
+            Move(-1);
+        }
+        else if (e.Key.Key == Key.Down || e.Key.Text == "j")
+        {
+            Move(1);
+        }
+        else if (e.Key.Key == Key.Enter)
+        {
+            Pick(_selected);
+        }
+        else if (e.Key.Text == "q")
+        {
+            Tui.Exit();
+        }
+        else
+        {
+            e.Handled = false;
+        }
+    }
+
+    private void Move(int delta) => _selected = Math.Clamp(_selected + delta, 0, Fruits.Length - 1);
+
+    private void Pick(int index)
+    {
+        _selected = index;
+        _picked = Fruits[index];
+    }
+}

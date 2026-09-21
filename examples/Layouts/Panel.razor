@@ -1,0 +1,11 @@
+@* A titled, bordered column that grows to share the row. *@
+<Box FlexDirection="FlexDirection.Column" Border="BorderStyle.Round" BorderColor="Color" Padding="new Edges(0, 1)" FlexGrow="1" Gap="1">
+    <Text Bold="true" Color="Color">@Title</Text>
+    @ChildContent
+</Box>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public Color Color { get; set; } = Color.Cyan;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

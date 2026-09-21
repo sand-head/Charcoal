@@ -307,6 +307,10 @@ public sealed class AnsiKeyParser
                 inputEvent = new KeyEvent(key, DecodeModifiers(modifiers ?? 1), "");
                 return length;
 
+            case 'Z' when parameters.IsEmpty:
+                inputEvent = new KeyEvent(Key.Tab, KeyModifiers.Shift, "");
+                return length;
+
             case 'A' or 'B' or 'C' or 'D' or 'H' or 'F':
                 if (parameters.IsEmpty)
                 {

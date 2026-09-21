@@ -540,4 +540,34 @@ public class FlexLayoutTests
         Assert.Equal(new Rect(1, 1, 7, 8), inner.Layout);
         Assert.Equal(new Rect(3, 3, 3, 1), leaf.Layout);
     }
+
+    [Fact]
+    public void Overflowing_content_with_justify_flex_end_keeps_the_end_in_view()
+    {
+        // Three items of height 2, shrink 0, in a column of height 3: the last
+        // item ends at the container's bottom and the first overflows the top.
+        var item = new Style { FlexShrink = 0 };
+        var column = new BoxNode(new Style { FlexDirection = FlexDirection.Column, JustifyContent = JustifyContent.FlexEnd },
+            new TextLeafNode(5, 2, item), new TextLeafNode(5, 2, item), new TextLeafNode(5, 2, item));
+
+        FlexLayout.Layout(column, new Size(10, 3));
+
+        Assert.Equal(-3, column.Children[0].Layout.Y);
+        Assert.Equal(-1, column.Children[1].Layout.Y);
+        Assert.Equal(1, column.Children[2].Layout.Y);
+        Assert.Equal(3, column.Children[2].Layout.Bottom);
+    }
+
+    [Fact]
+    public void Overflowing_content_with_justify_center_overflows_both_ways()
+    {
+        var item = new Style { FlexShrink = 0 };
+        var column = new BoxNode(new Style { FlexDirection = FlexDirection.Column, JustifyContent = JustifyContent.Center },
+            new TextLeafNode(5, 4, item), new TextLeafNode(5, 4, item));
+
+        FlexLayout.Layout(column, new Size(10, 4));
+
+        Assert.Equal(-2, column.Children[0].Layout.Y);
+        Assert.Equal(2, column.Children[1].Layout.Y);
+    }
 }

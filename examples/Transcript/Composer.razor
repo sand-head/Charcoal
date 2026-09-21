@@ -1,0 +1,87 @@
+@* A one-line editor. The cursor attribute places the terminal's cursor at the caret. *@
+<Box Border="BorderStyle.Round" BorderColor="@(_focused ? Color.Green : Color.BrightBlack)" Padding="new Edges(0, 1)" Gap="1" FlexShrink="0"
+     focusable="true" cursor="@($"{2 + _caret},0")" @onkeypress="OnKey" @onpaste="OnPaste" @onfocus="() => _focused = true" @onblur="() => _focused = false">
+    <Text Color="Color.Green">❯</Text>
+    <Text FlexGrow="1" Wrap="TextWrap.Clip">@_text</Text>
+</Box>
+
+@code {
+    [Parameter] public EventCallback<string> OnSubmit { get; set; }
+
+    private string _text = "";
+    private int _caret;
+    private bool _focused;
+
+    private async Task OnKey(KeyPressEventArgs e)
+    {
+        var key = e.Key;
+        e.Handled = true;
+        switch (key.Key)
+        {
+            case Key.Enter:
+                await SubmitAsync();
+                return;
+            case Key.Backspace:
+                if (_caret > 0)
+                {
+                    _caret--;
+                    _text = _text.Remove(_caret, 1);
+                }
+                return;
+            case Key.Delete:
+                if (_caret < _text.Length) _text = _text.Remove(_caret, 1);
+                return;
+            case Key.Left:
+                _caret = Math.Max(0, _caret - 1);
+                return;
+            case Key.Right:
+                _caret = Math.Min(_text.Length, _caret + 1);
+                return;
+            case Key.Home:
+                _caret = 0;
+                return;
+            case Key.End:
+                _caret = _text.Length;
+                return;
+        }
+
+        if (key.IsCtrl('u'))
+        {
+            Clear();
+        }
+        else if (key.IsText)
+        {
+            Insert(key.Text);
+        }
+        else
+        {
+            e.Handled = false;
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_text.Length == 0) return;
+        var submitted = _text;
+        Clear();
+        await OnSubmit.InvokeAsync(submitted);
+    }
+
+    private void Clear()
+    {
+        _text = "";
+        _caret = 0;
+    }
+
+    private void Insert(string text)
+    {
+        _text = _text.Insert(_caret, text);
+        _caret += text.Length;
+    }
+
+    private void OnPaste(PasteEventArgs e)
+    {
+        Insert(e.Text.ReplaceLineEndings(" "));
+        e.Handled = true;
+    }
+}

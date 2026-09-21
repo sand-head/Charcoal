@@ -18,7 +18,7 @@ public static class FlexLayout
     {
         var rect = new Rect(0, 0, Math.Max(0, viewport.Width), Math.Max(0, viewport.Height));
         Measure(root, rect.Width, rect.Height);
-        Arrange(root, rect);
+        Arrange(root, rect, rect);
     }
 
     /// <summary>The border-box size the node wants; a null constraint is unbounded.</summary>
@@ -138,10 +138,23 @@ public static class FlexLayout
     }
 
     /// <summary>Gives the node its rect and lays out its subtree inside it.</summary>
-    public static void Arrange(LayoutNode node, Rect rect)
+    public static void Arrange(LayoutNode node, Rect rect) => Arrange(node, rect, rect);
+
+    /// <summary>
+    /// Gives the node its rect and lays out its subtree inside it. Children
+    /// entirely outside <paramref name="visible"/> are placed but left
+    /// unarranged until they come into view.
+    /// </summary>
+    public static void Arrange(LayoutNode node, Rect rect, Rect visible)
     {
+        if (IsArrangementCurrent(node, rect, visible)) return;
+
         node.Layout = rect;
         node.LayoutDirty = false;
+        node.ArrangeDirty = false;
+        node.ArrangeDeferred = false;
+        node.HasDeferredChildren = false;
+        node.ArrangedVisible = visible;
         if (node.Style.Display == Display.None)
         {
             node.Layout = Rect.Empty;
@@ -152,21 +165,41 @@ public static class FlexLayout
         var style = node.Style;
         var content = rect.Deflate(style.Inset);
         var paddingBox = rect.Deflate(style.BorderEdges);
+        var childVisible = style.Overflow == Overflow.Visible ? visible : visible.Intersect(paddingBox);
 
-        ArrangeFlow(node, content);
+        ArrangeFlow(node, content, childVisible);
 
         foreach (var child in node.Children)
         {
             var cs = child.Style;
             if (cs.Display == Display.None)
             {
-                Arrange(child, Rect.Empty);
+                Arrange(child, Rect.Empty, childVisible);
             }
             else if (cs.Position == Position.Absolute)
             {
-                ArrangeAbsolute(child, paddingBox);
+                ArrangeAbsolute(child, paddingBox, childVisible);
             }
         }
+    }
+
+    private static bool IsArrangementCurrent(LayoutNode node, Rect rect, Rect visible)
+    {
+        if (node.ArrangeDirty || node.ArrangeDeferred || node.Layout != rect) return false;
+        return !node.HasDeferredChildren || node.ArrangedVisible == visible;
+    }
+
+    /// <summary>Arranges a child, or only places it when it is entirely outside the visible region.</summary>
+    private static void ArrangeChild(LayoutNode parent, LayoutNode child, Rect rect, Rect visible)
+    {
+        if (rect.Intersect(visible).IsEmpty && !rect.IsEmpty)
+        {
+            child.Layout = rect;
+            child.ArrangeDeferred = true;
+            parent.HasDeferredChildren = true;
+            return;
+        }
+        Arrange(child, rect, visible);
     }
 
     private sealed class Item
@@ -184,8 +217,7 @@ public static class FlexLayout
         public double Shrink;
     }
 
-
-    private static void ArrangeFlow(LayoutNode node, Rect content)
+    private static void ArrangeFlow(LayoutNode node, Rect content, Rect visible)
     {
         var style = node.Style;
         var row = IsRow(style.FlexDirection);
@@ -223,7 +255,11 @@ public static class FlexLayout
             item.Cross = CrossSize(item, style.AlignItems, crossSize, row);
         }
 
-        var used = items.Sum(i => i.Main + (row ? i.Margin.Horizontal : i.Margin.Vertical)) + gap * (items.Count - 1);
+        var used = gap * (items.Count - 1);
+        foreach (var item in items)
+        {
+            used += item.Main + (row ? item.Margin.Horizontal : item.Margin.Vertical);
+        }
         var free = mainSize - used;
         var (start, between) = Justify(style.JustifyContent, free, items.Count);
 
@@ -251,7 +287,7 @@ public static class FlexLayout
             var childRect = row
                 ? new Rect(content.X + mainPos, content.Y + crossPos, item.Main, item.Cross)
                 : new Rect(content.X + crossPos, content.Y + mainPos, item.Cross, item.Main);
-            Arrange(item.Node, childRect);
+            ArrangeChild(node, item.Node, childRect, visible);
         }
     }
 
@@ -291,18 +327,26 @@ public static class FlexLayout
     /// </summary>
     private static void ResolveMainSizes(List<Item> items, int mainSize, int gap, bool row)
     {
-        var margins = items.Sum(i => row ? i.Margin.Horizontal : i.Margin.Vertical);
+        var margins = 0;
+        var hypotheticalSum = 0;
+        foreach (var item in items)
+        {
+            margins += row ? item.Margin.Horizontal : item.Margin.Vertical;
+            hypotheticalSum += item.Hypothetical;
+        }
         var gaps = gap * (items.Count - 1);
         var available = mainSize - margins - gaps;
-
-        var hypotheticalSum = items.Sum(i => i.Hypothetical);
         var growing = available > hypotheticalSum;
 
+        var anyFlexible = false;
         foreach (var item in items)
         {
             item.Target = item.Hypothetical;
             item.Frozen = growing ? item.Grow <= 0 : item.Shrink <= 0;
+            item.Main = item.Hypothetical;
+            anyFlexible |= !item.Frozen;
         }
+        if (!anyFlexible) return;
 
         for (var iteration = 0; iteration < items.Count + 1; iteration++)
         {
@@ -364,7 +408,7 @@ public static class FlexLayout
     }
 
     /// <summary>Places an absolutely positioned child by its offsets inside the parent's padding box.</summary>
-    private static void ArrangeAbsolute(LayoutNode child, Rect paddingBox)
+    private static void ArrangeAbsolute(LayoutNode child, Rect paddingBox, Rect visible)
     {
         var cs = child.Style;
         var margin = cs.Margin;
@@ -395,7 +439,7 @@ public static class FlexLayout
 
         var x = AbsoluteStart(paddingBox.X, paddingBox.Right, cs.Left, cs.Right, margin.Left, margin.Right, width);
         var y = AbsoluteStart(paddingBox.Y, paddingBox.Bottom, cs.Top, cs.Bottom, margin.Top, margin.Bottom, height);
-        Arrange(child, new Rect(x, y, width, height));
+        ArrangeChild(child.LayoutParent ?? child, child, new Rect(x, y, width, height), visible);
     }
 
     private static int AbsoluteStart(int boxStart, int boxEnd, int? startOffset, int? endOffset, int marginStart, int marginEnd, int size)
@@ -407,7 +451,18 @@ public static class FlexLayout
 
     private static (int Start, int Between) Justify(JustifyContent justify, int free, int count)
     {
-        if (free <= 0) return (0, 0);
+        // Overflowing content still aligns to the end or the center, as in CSS;
+        // the space-* values fall back to flex-start.
+        if (free < 0)
+        {
+            return justify switch
+            {
+                JustifyContent.FlexEnd => (free, 0),
+                JustifyContent.Center => (free / 2, 0),
+                _ => (0, 0),
+            };
+        }
+        if (free == 0) return (0, 0);
         return justify switch
         {
             JustifyContent.Center => (free / 2, 0),

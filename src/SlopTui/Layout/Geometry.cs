@@ -53,4 +53,12 @@ public readonly record struct Edges(int Top, int Right, int Bottom, int Left)
 
     public static Edges operator +(Edges a, Edges b) =>
         new(a.Top + b.Top, a.Right + b.Right, a.Bottom + b.Bottom, a.Left + b.Left);
+
+    /// <summary>The CSS shorthand, which <c>StyleParser</c> reads back.</summary>
+    public override string ToString()
+    {
+        if (Top != Bottom || Left != Right) return $"{Top} {Right} {Bottom} {Left}";
+        if (Top != Left) return $"{Top} {Left}";
+        return Top.ToString();
+    }
 }

@@ -64,9 +64,10 @@ children.
 
 ## Elements and attributes
 
-Three element names. Attribute names are kebab-case CSS names; values may be
-strings (from Razor literals) or typed objects (from `@` expressions), and
-`StyleParser` accepts both.
+Three element names. Attribute names are kebab-case CSS names. Blazor passes
+element attribute values as strings, so every typed value (`Edges`, `Length`,
+`Color`, the enums) has a `ToString` that `StyleParser` reads back. A `bool`
+arrives as itself, and `false` omits the attribute.
 
 **`box`** — a flex container. Layout attributes: `display` (flex|none),
 `flex-direction` (row|column|row-reverse|column-reverse), `justify-content`
@@ -90,10 +91,10 @@ It also takes the box layout attributes that make sense for a flex item
 `align-self`). A `text` nested in a `text` is a styled run inheriting the
 outer style; it is not a layout node. `"\n"` inside text is a line break.
 
-**`canvas`** — a leaf whose content is painted by a delegate: attribute
-`paint` of type `Action<CellBuffer, Rect>`. This is how a component owns a
-region wholesale (a transcript, a chart) without a node per line. It takes
-the flex-item layout attributes.
+**`canvas`** — a leaf painted by a delegate. The `Canvas` component
+registers its `Paint` delegate in the `CanvasRegistry` service and puts the
+registry key in the element's `paint` attribute, since an element attribute
+cannot hold a delegate. It takes the flex-item layout attributes.
 
 Colours: `default`, the sixteen ANSI names (`black … white`,
 `bright-black … bright-white`), `#rrggbb`, `rgb(r,g,b)`, `ansi(n)` for the
@@ -123,6 +124,15 @@ the subset is small:
 - `display: none` removes a node from flow and paint. `position: absolute`
   removes it from flow and places it by its offsets inside the parent's
   padding box.
+- The automatic minimum size of an item is zero, as in Yoga, rather than
+  CSS's content-based minimum. Use `flex-shrink: 0` on items that must keep
+  their size.
+- When content overflows, `justify-content: flex-end` keeps the end in
+  view, `center` overflows both ways, and the `space-*` values fall back to
+  flex-start.
+- A clean subtree on an unchanged rect is not re-arranged, and a child
+  entirely outside the visible region is placed but not arranged until it
+  comes into view.
 - Rects are absolute terminal cells, so the painter needs no coordinate walk.
 
 After one text changes, a frame re-measures that text node and re-arranges

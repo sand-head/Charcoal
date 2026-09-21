@@ -711,4 +711,14 @@ public class AnsiKeyParserTests
         Assert.Equal(code, key.Key);
         Assert.Equal(KeyModifiers.Alt, key.Modifiers);
     }
+
+    [Fact]
+    public void Back_tab_is_shift_tab()
+    {
+        var parser = new AnsiKeyParser();
+        var result = parser.Feed("\e[Z", 0);
+        var key = Assert.IsType<KeyEvent>(Assert.Single(result.Events));
+        Assert.Equal(Key.Tab, key.Key);
+        Assert.Equal(KeyModifiers.Shift, key.Modifiers);
+    }
 }

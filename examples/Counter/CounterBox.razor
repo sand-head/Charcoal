@@ -1,0 +1,46 @@
+@* A focusable counter that takes + and − while focused. *@
+<Box focusable="true" Border="BorderStyle.Round" BorderColor="@(_focused ? Color.Green : Color.BrightBlack)"
+     Padding="new Edges(0, 2)" FlexDirection="FlexDirection.Column" AlignItems="AlignItems.Center"
+     @onkeypress="OnKey" @onfocus="() => Focus(true)" @onblur="() => Focus(false)" @onclick="OnClick">
+    <Text Dim="!_focused">@Model.Name</Text>
+    <Text Bold="true" Color="@(_focused ? Color.Green : Color.Default)">@Model.Value</Text>
+</Box>
+
+@code {
+    [Parameter, EditorRequired] public App.CounterModel Model { get; set; } = default!;
+
+    private bool _focused;
+
+    private void Focus(bool gained)
+    {
+        _focused = gained;
+    }
+
+    private void OnKey(KeyPressEventArgs e)
+    {
+        switch (e.Key.Text)
+        {
+            case "+" or "=":
+                Model.Value++;
+                e.Handled = true;
+                break;
+            case "-" or "_":
+                Model.Value--;
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void OnClick(MouseEventArgs e)
+    {
+        if (e.Mouse.Button == MouseButton.Right)
+        {
+            Model.Value--;
+        }
+        else
+        {
+            Model.Value++;
+        }
+        e.Handled = true;
+    }
+}

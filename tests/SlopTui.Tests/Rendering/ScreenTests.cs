@@ -62,7 +62,7 @@ public class ScreenTests
         var screen = Blank(10, 1);
         screen.Back.PutText(0, 0, "abcdefghij", D, D, TextStyle.None);
         screen.Flush();
-        screen.Back.Fill(new Layout.Rect(3, 0, 7, 1), Cell.Blank);
+        screen.Back.Fill(new global::SlopTui.Layout.Rect(3, 0, 7, 1), Cell.Blank);
         var frame = screen.Flush();
         Assert.Contains(Esc + "[1;4H", frame);
         Assert.Contains(Esc + "[K", frame);
@@ -73,7 +73,7 @@ public class ScreenTests
     public void A_tail_with_a_background_is_content_not_blank()
     {
         var screen = Blank(4, 1);
-        screen.Back.Fill(new Layout.Rect(0, 0, 4, 1), Cell.Space(D, Color.Red));
+        screen.Back.Fill(new global::SlopTui.Layout.Rect(0, 0, 4, 1), Cell.Space(D, Color.Red));
         var frame = screen.Flush();
         Assert.DoesNotContain(Esc + "[K", frame);
         Assert.Contains("    ", frame);

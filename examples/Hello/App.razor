@@ -1,0 +1,17 @@
+@inject TuiApp Tui
+
+<Box FlexDirection="FlexDirection.Column" Padding="new Edges(1, 2)" @onkeypress="OnKey" focusable="true">
+    <Box Border="BorderStyle.Round" BorderColor="Color.Cyan" Padding="new Edges(0, 1)">
+        <Text Bold="true" Color="Color.Green">Hello from sloptui</Text>
+    </Box>
+    <Text Dim="true">Press q to quit. Terminal is @Tui.Size.Width×@Tui.Size.Height cells.</Text>
+</Box>
+
+@code {
+    private void OnKey(KeyPressEventArgs e)
+    {
+        if (e.Key.Text != "q") return;
+        Tui.Exit();
+        e.Handled = true;
+    }
+}

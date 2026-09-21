@@ -229,4 +229,21 @@ public class PainterTests
         Assert.Equal(Color.Blue, buffer[1, 0].Background);
         Assert.Equal(Color.Red, buffer[3, 0].Background);
     }
+
+    [Fact]
+    public void A_child_outside_the_clip_is_not_painted_at_all()
+    {
+        var painted = 0;
+        var seen = new CanvasNode((_, _) => painted++);
+        var hidden = new CanvasNode((_, _) => painted++);
+        var column = new BoxNode(new Style { FlexDirection = FlexDirection.Column, JustifyContent = JustifyContent.FlexEnd, Height = 2 }, hidden, seen);
+        hidden.Style = new Style { Height = 2, FlexShrink = 0 };
+        seen.Style = new Style { Height = 2, FlexShrink = 0 };
+        FlexLayout.Layout(column, new Size(10, 2));
+        Assert.True(hidden.Layout.Bottom <= 0);
+
+        Painter.Paint(column, new CellBuffer(10, 2));
+
+        Assert.Equal(1, painted);
+    }
 }

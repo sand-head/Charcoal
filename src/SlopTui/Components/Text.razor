@@ -1,0 +1,62 @@
+@* Styled text: a wrapped leaf at the top level, a styled run inside another Text. *@
+<text @attributes="Attributes()">@ChildContent</text>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public Color? Color { get; set; }
+    [Parameter] public Color? Background { get; set; }
+    [Parameter] public bool Bold { get; set; }
+    [Parameter] public bool Dim { get; set; }
+    [Parameter] public bool Italic { get; set; }
+    [Parameter] public bool Underline { get; set; }
+    [Parameter] public bool Inverse { get; set; }
+    [Parameter] public bool Strikethrough { get; set; }
+    [Parameter] public TextWrap? Wrap { get; set; }
+
+    [Parameter] public double? FlexGrow { get; set; }
+    [Parameter] public double? FlexShrink { get; set; }
+    [Parameter] public Length? Width { get; set; }
+    [Parameter] public Length? Height { get; set; }
+    [Parameter] public Length? MinWidth { get; set; }
+    [Parameter] public Length? MaxWidth { get; set; }
+    [Parameter] public Edges? Padding { get; set; }
+    [Parameter] public Edges? Margin { get; set; }
+    [Parameter] public AlignSelf? AlignSelf { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private Dictionary<string, object> Attributes()
+    {
+        var attributes = new Dictionary<string, object>(AdditionalAttributes ?? new Dictionary<string, object>(), StringComparer.Ordinal);
+        Put(attributes, "color", Color);
+        Put(attributes, "background", Background);
+        PutFlag(attributes, "bold", Bold);
+        PutFlag(attributes, "dim", Dim);
+        PutFlag(attributes, "italic", Italic);
+        PutFlag(attributes, "underline", Underline);
+        PutFlag(attributes, "inverse", Inverse);
+        PutFlag(attributes, "strikethrough", Strikethrough);
+        Put(attributes, "wrap", Wrap);
+        Put(attributes, "flex-grow", FlexGrow);
+        Put(attributes, "flex-shrink", FlexShrink);
+        Put(attributes, "width", Width);
+        Put(attributes, "height", Height);
+        Put(attributes, "min-width", MinWidth);
+        Put(attributes, "max-width", MaxWidth);
+        Put(attributes, "padding", Padding);
+        Put(attributes, "margin", Margin);
+        Put(attributes, "align-self", AlignSelf);
+        return attributes;
+    }
+
+    private static void Put<T>(Dictionary<string, object> attributes, string name, T? value) where T : struct
+    {
+        if (value is { } set) attributes[name] = set;
+    }
+
+    private static void PutFlag(Dictionary<string, object> attributes, string name, bool on)
+    {
+        if (on) attributes[name] = true;
+    }
+}

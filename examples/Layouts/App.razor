@@ -1,0 +1,50 @@
+@inject TuiApp Tui
+
+<Box FlexDirection="FlexDirection.Column" FlexGrow="1" @onkeypress="OnKey" focusable="true">
+    <Box Padding="new Edges(0, 1)" Gap="2">
+        <Text Bold="true">sloptui layouts</Text>
+        <Text Dim="true">page @(_page + 1)/@Titles.Length · @Titles[_page] · ← → to browse · q to quit</Text>
+    </Box>
+
+    @switch (_page)
+    {
+        case 0: <RowColumnPage /> break;
+        case 1: <JustifyPage /> break;
+        case 2: <AlignPage /> break;
+        case 3: <GrowPage /> break;
+        case 4: <BordersPage /> break;
+        default: <AbsolutePage /> break;
+    }
+
+    <Box Padding="new Edges(0, 1)">
+        <Text Dim="true">every page is Box + Text; the source is one .razor file per page</Text>
+    </Box>
+</Box>
+
+@code {
+    private static readonly string[] Titles =
+        ["row and column", "justify-content", "align-items and stretch", "grow, shrink, basis, percent", "borders, padding, wrapping", "absolute position"];
+
+    private int _page;
+
+    private void OnKey(KeyPressEventArgs e)
+    {
+        e.Handled = true;
+        if (e.Key.Key == Key.Right)
+        {
+            _page = (_page + 1) % Titles.Length;
+        }
+        else if (e.Key.Key == Key.Left)
+        {
+            _page = (_page + Titles.Length - 1) % Titles.Length;
+        }
+        else if (e.Key.Text == "q")
+        {
+            Tui.Exit();
+        }
+        else
+        {
+            e.Handled = false;
+        }
+    }
+}

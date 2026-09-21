@@ -1,0 +1,15 @@
+<Box FlexGrow="1" Gap="1" Padding="new Edges(0, 1)" AlignItems="AlignItems.FlexStart">
+    @foreach (var style in new[] { BorderStyle.Single, BorderStyle.Double, BorderStyle.Round, BorderStyle.Bold, BorderStyle.Classic })
+    {
+        <Box Border="style" Padding="new Edges(1, 2)" FlexDirection="FlexDirection.Column" Width="24">
+            <Text Bold="true">@style</Text>
+            <Text Wrap="TextWrap.Wrap">This text wraps inside a @style.ToString().ToLowerInvariant() border with padding 1 2.</Text>
+        </Box>
+    }
+    <Box FlexDirection="FlexDirection.Column" Gap="1" Width="30">
+        <Text Wrap="TextWrap.Truncate">truncate: this line is far too long to fit in thirty cells</Text>
+        <Text Wrap="TextWrap.TruncateStart">truncate-start: this line is far too long to fit in thirty cells</Text>
+        <Text Wrap="TextWrap.TruncateMiddle">truncate-middle: this line is far too long to fit in thirty cells</Text>
+        <Text Wrap="TextWrap.Clip">clip: this line is far too long to fit in thirty cells</Text>
+    </Box>
+</Box>
