@@ -41,11 +41,11 @@ public class HtmlTagsTests
     }
 
     [Fact]
-    public void A_tag_on_its_own_is_a_text_leaf()
+    public void A_tag_on_its_own_under_a_box_is_an_anonymous_text_leaf()
     {
         var renderer = Render();
-        var leaf = renderer.Root.Descendants().OfType<HostElement>().Single(e => e.Name == "strong" && !e.IsInlineText);
-        Assert.IsType<TextLayoutNode>(leaf.Node);
+        var box = renderer.Root.Descendants().OfType<HostElement>().Single(e => e.Name == "box");
+        var leaf = Assert.IsType<AnonymousTextNode>(Assert.Single(box.Node.Children));
         Assert.Equal("heading", string.Concat(leaf.Runs.Select(r => r.Text)));
         Assert.Equal(TextStyle.Bold, leaf.Runs[0].Style);
     }

@@ -102,6 +102,29 @@ inverse, `span` nothing, and `br` a line break. Sheets and attributes apply
 on top of the preset, and type selectors match the tag as written, so
 `strong { color: red }` matches `<strong>` and no other bold run.
 
+Bare text under a box is laid out too. Each run of text nodes and inline
+tags directly under a box becomes an anonymous text leaf
+(`AnonymousTextNode`), as CSS wraps inline content in an anonymous box. It
+wraps as one text, takes the colour and flags a `text` child would inherit
+and the box's `wrap` mode, and stays current when its text changes or an
+ancestor restyles. Markup formatting makes no leaf: in a markup frame,
+whitespace with a line break collapses to one space inside the text and to
+nothing at its ends, and the leaf trims spaces at its own edges. A line
+break is `<br>`, `<Newline />` or a `"\n"` in a value. The HTML block tags
+(`div`, `p`, `section`, `article`, `main`, `header`, `footer`, `nav`,
+`aside`, `ul`, `ol`, `li`, `pre`, `blockquote`, `h1`–`h6`) are boxes whose
+children stack, and headings are bold.
+
+**`img`** — a leaf showing a decoded picture (`ImageLayoutNode`). `src` is
+a file path or a `data:` URI; `ImageDecoder` uses StbImageSharp, and a
+failure shows the `alt` text instead. Sizing assumes an 8×16-pixel cell:
+without a size the image is `ceil(px/8)` × `ceil(px/16)` cells, shrunk to
+the available width with its shape kept; one given side sets the other from
+the aspect ratio, and two given sides stretch it. `ImagePainter` paints two
+pixel rows per cell with the upper-half block, in truecolour, and leaves a
+mostly transparent sample's cell alone. The available height is ignored,
+because it differs between the unbounded hypothetical measure and the final one.
+
 **`canvas`** — a leaf painted by a delegate. The `Canvas` component
 registers its `Paint` delegate in the `CanvasRegistry` service and puts the
 registry key in the element's `paint` attribute, since an element attribute

@@ -40,7 +40,15 @@ return new TuiApp().Run<App>();
   `<Run>`, the same component, there. HTML inline tags work inside a text:
   `<strong>`/`<b>` bold, `<em>`/`<i>` italic, `<u>`, `<s>`/`<del>`, `<mark>`
   (inverse), `<span>` and `<br>`. Sheets and attributes override the tag,
-  so `<strong bold="false">` is plain.
+  so `<strong bold="false">` is plain. Bare text under a box needs no
+  `Text`: it becomes an anonymous text leaf, as in a CSS block. `<div>`,
+  `<p>`, `<section>`, `<h1>` and the other block tags are boxes whose
+  children stack, where a `<box>` is a row; headings are bold.
+- **Pictures.** `<img src="logo.png" width="24" />`, or the `Image`
+  component, decodes PNG, JPEG, GIF, BMP, TGA and PSD without a native
+  library and paints two pixel rows per cell in truecolour. Given one side,
+  the other follows the image's shape; given neither, it shrinks to fit.
+  `alt` shows when the source does not decode.
   Parameters, `@key`, `EventCallback`, cascading values, `@inject`,
   `StateHasChanged` and `InvokeAsync` work as they do on the web.
 - **Flexbox and grid on cells.** Direction, wrap, justify, align (items,

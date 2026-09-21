@@ -48,6 +48,20 @@ public class MarkupParserTests
         Assert.Equal("1 < 2  still text", string.Concat(nodes.OfType<HostTextNode>().Select(t => t.Text)));
     }
 
+    [Fact]
+    public void Newlines_in_markup_are_formatting()
+    {
+        Assert.Equal("Hello world", MarkupParser.CollapseNewlines("\n    Hello\n    world\n"));
+        Assert.Equal(" Hello world ", MarkupParser.CollapseNewlines("\n    Hello\n    world\n", first: false, last: false));
+        Assert.Equal("a b", MarkupParser.CollapseNewlines("a\r\n  b"));
+        Assert.Equal("a  b", MarkupParser.CollapseNewlines("a  b"));          // spaces without a newline stay
+        Assert.Equal("\n    ", MarkupParser.CollapseNewlines("\n    "));    // whitespace-only stays for the run collector to drop
+        var nodes = Parse("<div>\n    Hello\n    <strong>x</strong>\n</div>");
+        var div = Assert.IsType<HostElement>(Assert.Single(nodes));
+        Assert.Equal("Hello ", Assert.IsType<HostTextNode>(div.Children[0]).Text);
+        Assert.Equal("\n", Assert.IsType<HostTextNode>(div.Children[2]).Text);
+    }
+
     /// <summary>A component whose whole tree is static markup: Razor emits one markup frame for it.</summary>
     private sealed class StaticTree : ComponentBase
     {

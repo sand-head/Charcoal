@@ -6,6 +6,11 @@
     </Box>
     <Text Dim="true">Press q to quit. Terminal is @Tui.Size.Width×@Tui.Size.Height cells.</Text>
     <Text>HTML inline tags work: <strong>strong</strong>, <em>em</em>, <u>u</u>, <s>s</s>, <mark>mark</mark><br />and a <span color="magenta">span</span> after a br.</Text>
+    <div color="cyan" margin-top="1">
+        Bare text under a div needs no Text element, and a div stacks its children.
+        <img src="sloptui.png" alt="[sloptui.png]" width="24" />
+        <p>An <em>img</em> is a leaf sized from its pixels; here it was given a width.</p>
+    </div>
 </Box>
 
 @code {

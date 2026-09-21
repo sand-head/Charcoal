@@ -148,18 +148,43 @@ public sealed class HostElement : HostNode
         ["br"] = TextStyle.None,
     };
 
+    private static readonly string[] BlockTags =
+        ["div", "p", "section", "article", "main", "header", "footer", "nav", "aside", "ul", "ol", "li", "pre", "blockquote"];
+
+    private static readonly string[] HeadingTags = ["h1", "h2", "h3", "h4", "h5", "h6"];
+
+    /// <summary>HTML block tags are boxes whose children stack, where a <c>box</c> is a row. Headings are bold.</summary>
+    private static readonly Dictionary<string, Style> HtmlBlock = BlockStyles();
+
+    private static Dictionary<string, Style> BlockStyles()
+    {
+        var column = Style.Default with { FlexDirection = FlexDirection.Column };
+        var heading = column with { TextStyle = TextStyle.Bold };
+        var styles = new Dictionary<string, Style>(StringComparer.Ordinal);
+        foreach (var tag in BlockTags) styles[tag] = column;
+        foreach (var tag in HeadingTags) styles[tag] = heading;
+        return styles;
+    }
+
     public HostElement(string name, CanvasRegistry? canvases = null, StyleContext? styles = null)
     {
         Name = name;
         IsText = name == "text" || HtmlInline.ContainsKey(name);
+        IsInline = IsText && name != "text";
         IsBreak = name == "br";
-        BaseStyle = HtmlInline.TryGetValue(name, out var preset) && preset != TextStyle.None
-            ? Style.Default with { TextStyle = preset }
-            : Style.Default;
+        IsImage = name == "img";
+        BaseStyle = PresetStyle(name);
         Node = ElementLayoutNode.For(this);
         _canvases = canvases;
         _styles = styles;
         if (_styles is not null && _styles.Sheets.Count > 0) Rebuild(null);
+    }
+
+    private static Style PresetStyle(string name)
+    {
+        if (HtmlInline.TryGetValue(name, out var flags) && flags != TextStyle.None) return Style.Default with { TextStyle = flags };
+        if (HtmlBlock.TryGetValue(name, out var block)) return block;
+        return Style.Default;
     }
 
     /// <summary>The classes in the <c>class</c> attribute.</summary>
@@ -175,16 +200,28 @@ public sealed class HostElement : HostNode
     /// <summary>Whether this is <c>text</c> or an HTML inline tag.</summary>
     public bool IsText { get; }
 
+    /// <summary>
+    /// Whether this is an HTML inline tag such as <c>strong</c> or <c>span</c>.
+    /// It is always a styled run: under a box it joins the text beside it in
+    /// an anonymous text leaf.
+    /// </summary>
+    public bool IsInline { get; }
+
     /// <summary>Whether this is a <c>&lt;br&gt;</c>.</summary>
     public bool IsBreak { get; }
+
+    public bool IsImage { get; }
 
     /// <summary>The style the cascade starts from: the tag's preset, if it has one.</summary>
     internal Style BaseStyle { get; }
 
     public bool IsCanvas => Name == "canvas";
 
-    /// <summary>Whether this is a <c>text</c> element nested in another, and so a styled run.</summary>
-    public bool IsInlineText => IsText && Parent?.ClosestElement is { IsText: true };
+    /// <summary>
+    /// Whether this text element is a run within something else: an inline
+    /// tag, or a <c>text</c> nested in another.
+    /// </summary>
+    public bool IsInlineText => IsText && (IsInline || Parent?.ClosestElement is { IsText: true });
 
     public bool Focusable { get; private set; }
 
@@ -242,6 +279,14 @@ public sealed class HostElement : HostNode
         {
             DescendantsChanged(structural: false);
         }
+        else if (!IsText)
+        {
+            // Anonymous text takes its look from this box and its ancestors,
+            // and a restyle may have come from any of them.
+            RestyleAnonymousText();
+        }
+
+        if (Node is ImageLayoutNode image && changed is "src" or "alt") image.Reload();
 
         var affectsDescendants = changed is "class" or "id"
             || previous.Color != Node.Style.Color
@@ -299,6 +344,37 @@ public sealed class HostElement : HostNode
         return style;
     }
 
+    private void RestyleAnonymousText()
+    {
+        foreach (var anonymous in AnonymousTextChildren())
+        {
+            anonymous.Restyle();
+        }
+    }
+
+    private IEnumerable<AnonymousTextNode> AnonymousTextChildren() =>
+        _layoutChildren?.OfType<AnonymousTextNode>() ?? [];
+
+    /// <summary>
+    /// The colour and flags a text directly under this element would inherit:
+    /// the nearest colour set here or above, and every flag.
+    /// </summary>
+    internal (Color Color, TextStyle Flags) InheritedText()
+    {
+        var color = Color.Default;
+        var flags = TextStyle.None;
+        for (var element = this; element is not null; element = element.Parent?.ClosestElement)
+        {
+            var style = element.Node.Style;
+            if (color.Kind == ColorKind.Default && style.Color.Kind != ColorKind.Default)
+            {
+                color = style.Color;
+            }
+            flags |= style.TextStyle;
+        }
+        return (color, flags);
+    }
+
     private static IReadOnlySet<string> ParseClasses(object? value)
     {
         switch (value)
@@ -344,39 +420,75 @@ public sealed class HostElement : HostNode
 
     internal void DescendantsChanged(bool structural)
     {
-        if (structural) _layoutChildren = null;
+        if (structural)
+        {
+            _layoutChildren = null;
+        }
+        else
+        {
+            foreach (var anonymous in AnonymousTextChildren())
+            {
+                anonymous.ContentChanged();
+            }
+        }
         _runs = null;
         Node.InvalidateLayout();
         if (IsInlineText) Parent?.ClosestElement?.DescendantsChanged(structural);
     }
 
+    /// <summary>
+    /// Descendant elements with containers flattened out. Bare text and inline
+    /// tags between them are grouped into anonymous text leaves, as CSS wraps
+    /// the text in a block in anonymous boxes.
+    /// </summary>
     internal IReadOnlyList<LayoutNode> LayoutChildren
     {
         get
         {
             if (_layoutChildren is not null) return _layoutChildren;
-            var list = new List<LayoutNode>();
-            if (!IsText && !IsCanvas) Collect(this, list);
-            foreach (var child in list) child.LayoutParent = Node;
-            _layoutChildren = list;
-            return list;
+            var children = new List<LayoutNode>();
+            if (!IsText && !IsCanvas && !IsImage)
+            {
+                var inlineRun = new List<HostNode>();
+                Collect(this, children, inlineRun);
+                EndInlineRun(children, inlineRun);
+            }
+            foreach (var child in children) child.LayoutParent = Node;
+            _layoutChildren = children;
+            return children;
         }
     }
 
-    private static void Collect(HostNode node, List<LayoutNode> into)
+    private void Collect(HostNode node, List<LayoutNode> into, List<HostNode> inlineRun)
     {
         foreach (var child in node.Children)
         {
             switch (child)
             {
+                case HostElement { IsInline: true } inline:
+                    inlineRun.Add(inline);
+                    break;
                 case HostElement element:
+                    EndInlineRun(into, inlineRun);
                     into.Add(element.Node);
                     break;
+                case HostTextNode text:
+                    if (text.Text.Length > 0 && !IsMarkupWhitespace(text.Text)) inlineRun.Add(text);
+                    break;
                 case HostContainer container:
-                    Collect(container, into);
+                    Collect(container, into, inlineRun);
                     break;
             }
         }
+    }
+
+    /// <summary>Turns the pending inline run into an anonymous text leaf, unless it is only spaces.</summary>
+    private void EndInlineRun(List<LayoutNode> into, List<HostNode> inlineRun)
+    {
+        if (inlineRun.Count == 0) return;
+        var hasContent = inlineRun.Any(part => part is HostElement || part is HostTextNode { Text: var text } && !string.IsNullOrWhiteSpace(text));
+        if (hasContent) into.Add(new AnonymousTextNode(this, [.. inlineRun]));
+        inlineRun.Clear();
     }
 
     /// <summary>The styled runs of a text leaf.</summary>
@@ -392,9 +504,13 @@ public sealed class HostElement : HostNode
         }
     }
 
-    private static void CollectRuns(HostNode node, Color fg, Color bg, TextStyle style, List<TextRun> into)
+    private static void CollectRuns(HostNode node, Color fg, Color bg, TextStyle style, List<TextRun> into) =>
+        CollectRuns(node.Children, fg, bg, style, into);
+
+    /// <summary>The runs of text nodes and inline elements, each inline element in its own look.</summary>
+    internal static void CollectRuns(IEnumerable<HostNode> nodes, Color fg, Color bg, TextStyle style, List<TextRun> into)
     {
-        foreach (var child in node.Children)
+        foreach (var child in nodes)
         {
             switch (child)
             {
@@ -480,6 +596,7 @@ public class ElementLayoutNode : LayoutNode
     {
         if (element.IsText) return new TextLayoutNode(element);
         if (element.IsCanvas) return new CanvasLayoutNode(element);
+        if (element.IsImage) return new ImageLayoutNode(element);
         return new ElementLayoutNode(element);
     }
 }
@@ -497,6 +614,154 @@ public sealed class TextLayoutNode : ElementLayoutNode, ITextContent
         TextLayout.Measure(Element.Runs, availableWidth, Style.Wrap);
 
     public override int MinContentWidth() => TextLayout.MinContentWidth(Element.Runs, Style.Wrap);
+}
+
+/// <summary>
+/// The anonymous text leaf CSS creates for bare text and inline tags directly
+/// under a box. It inherits its look from the box, as a text child would.
+/// </summary>
+public sealed class AnonymousTextNode : LayoutNode, ITextContent
+{
+    private readonly List<HostNode> _parts;
+    private List<TextRun>? _runs;
+
+    internal AnonymousTextNode(HostElement owner, List<HostNode> parts)
+    {
+        Owner = owner;
+        _parts = parts;
+        Style = StyleFor(owner);
+    }
+
+    /// <summary>The box the text stands in.</summary>
+    public HostElement Owner { get; }
+
+    /// <summary>The text nodes and inline elements, in order.</summary>
+    public IReadOnlyList<HostNode> Parts => _parts;
+
+    public override IReadOnlyList<LayoutNode> Children => [];
+
+    public override bool IsLeaf => true;
+
+    public IReadOnlyList<TextRun> Runs
+    {
+        get
+        {
+            if (_runs is not null) return _runs;
+            var runs = new List<TextRun>();
+            HostElement.CollectRuns(_parts, Color.Default, Color.Default, TextStyle.None, runs);
+            TrimEdges(runs);
+            _runs = runs;
+            return runs;
+        }
+    }
+
+    /// <summary>
+    /// Drops the spaces at the edges, as a browser drops the whitespace where
+    /// a block's text meets its blocks. A <c>text</c> element keeps its spaces.
+    /// </summary>
+    private static void TrimEdges(List<TextRun> runs)
+    {
+        while (runs.Count > 0)
+        {
+            var trimmed = runs[0].Text.TrimStart(' ');
+            if (trimmed.Length > 0)
+            {
+                runs[0] = runs[0] with { Text = trimmed };
+                break;
+            }
+            runs.RemoveAt(0);
+        }
+        while (runs.Count > 0)
+        {
+            var trimmed = runs[^1].Text.TrimEnd(' ');
+            if (trimmed.Length > 0)
+            {
+                runs[^1] = runs[^1] with { Text = trimmed };
+                break;
+            }
+            runs.RemoveAt(runs.Count - 1);
+        }
+    }
+
+    public override Size MeasureContent(int? availableWidth, int? availableHeight) =>
+        TextLayout.Measure(Runs, availableWidth, Style.Wrap);
+
+    public override int MinContentWidth() => TextLayout.MinContentWidth(Runs, Style.Wrap);
+
+    internal void ContentChanged()
+    {
+        _runs = null;
+        InvalidateLayout();
+    }
+
+    internal void Restyle() => Style = StyleFor(Owner);
+
+    private static Style StyleFor(HostElement owner)
+    {
+        var (color, flags) = owner.InheritedText();
+        return Style.Default with { Color = color, TextStyle = flags, Wrap = owner.Node.Style.Wrap };
+    }
+}
+
+/// <summary>
+/// An <c>img</c> element's node, sized from its pixels. The <c>src</c> is a
+/// file path or a <c>data:</c> URI; <c>alt</c> shows when it cannot be decoded.
+/// </summary>
+public sealed class ImageLayoutNode : ElementLayoutNode, ICustomPaint
+{
+    private ImageData? _image;
+    private string? _loadedSrc;
+    private bool _loaded;
+
+    public ImageLayoutNode(HostElement element) : base(element) { }
+
+    public override bool IsLeaf => true;
+
+    /// <summary>The decoded image, or null when there is no source or it did not decode.</summary>
+    public ImageData? Image
+    {
+        get
+        {
+            var src = Element.Attributes.GetValueOrDefault("src")?.ToString();
+            if (_loaded && src == _loadedSrc) return _image;
+            _image = src is null ? null : ImageDecoder.Load(src);
+            _loadedSrc = src;
+            _loaded = true;
+            return _image;
+        }
+    }
+
+    private string Alt => Element.Attributes.GetValueOrDefault("alt")?.ToString() ?? "";
+
+    internal void Reload()
+    {
+        _loaded = false;
+        InvalidateLayout();
+    }
+
+    public override Size MeasureContent(int? availableWidth, int? availableHeight)
+    {
+        var image = Image;
+        if (image is null) return TextLayout.Measure([new TextRun(Alt)], availableWidth, TextWrap.Wrap);
+
+        var fixedWidth = Style.Width.IsAuto ? null : availableWidth;
+        var fixedHeight = Style.Height.IsAuto ? null : availableHeight;
+        return ImagePainter.Fit(image, fixedWidth, fixedHeight, availableWidth);
+    }
+
+    public override int MinContentWidth() =>
+        Image is null ? TextLayout.MinContentWidth([new TextRun(Alt)], TextWrap.Wrap) : 1;
+
+    public void Paint(CellBuffer buffer, Rect rect)
+    {
+        var image = Image;
+        if (image is null)
+        {
+            buffer.PutText(rect.X, rect.Y, Alt, Style.Color, Style.Background, Style.TextStyle);
+            return;
+        }
+        ImagePainter.Paint(buffer, rect, image);
+    }
 }
 
 /// <summary>A <c>canvas</c> element's node, painted by a delegate.</summary>

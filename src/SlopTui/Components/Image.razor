@@ -1,0 +1,48 @@
+@*
+    An img element with typed parameters. Given Width or Height, the other
+    follows the image's shape; given neither, the image is shrunk to fit.
+*@
+<img src="@Src" alt="@Alt" @attributes="Attributes()" />
+
+@code {
+    /// <summary>A file path or a <c>data:</c> URI.</summary>
+    [Parameter, EditorRequired] public string? Src { get; set; }
+
+    /// <summary>Shown when the image cannot be decoded.</summary>
+    [Parameter] public string? Alt { get; set; }
+
+    [Parameter] public Length? Width { get; set; }
+    [Parameter] public Length? Height { get; set; }
+    [Parameter] public Edges? Margin { get; set; }
+    [Parameter] public double? FlexGrow { get; set; }
+    [Parameter] public double? FlexShrink { get; set; }
+    [Parameter] public AlignSelf? AlignSelf { get; set; }
+    [Parameter] public string? GridColumn { get; set; }
+    [Parameter] public string? GridRow { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private Dictionary<string, object> Attributes()
+    {
+        var attributes = new Dictionary<string, object>(AdditionalAttributes ?? new Dictionary<string, object>());
+        Put(attributes, "width", Width);
+        Put(attributes, "height", Height);
+        Put(attributes, "margin", Margin);
+        Put(attributes, "flex-grow", FlexGrow);
+        Put(attributes, "flex-shrink", FlexShrink);
+        Put(attributes, "align-self", AlignSelf);
+        Put(attributes, "grid-column", GridColumn);
+        Put(attributes, "grid-row", GridRow);
+        return attributes;
+    }
+
+    private static void Put<T>(Dictionary<string, object> attributes, string name, T? value) where T : struct
+    {
+        if (value is { } set) attributes[name] = set;
+    }
+
+    private static void Put(Dictionary<string, object> attributes, string name, string? value)
+    {
+        if (value is not null) attributes[name] = value;
+    }
+}
