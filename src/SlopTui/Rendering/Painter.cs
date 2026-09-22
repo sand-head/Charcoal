@@ -29,7 +29,10 @@ public static class Painter
 
         if (node is ITextContent text)
         {
-            buffer.PushClip(content);
+            // Only the rows are clipped to the leaf. Text overflows sideways
+            // until an ancestor clips it, which is what horizontal scrolling needs.
+            var rows = new Rect(buffer.Clip.X, content.Y, buffer.Clip.Width, content.Height);
+            buffer.PushClip(rows);
             PaintText(text, style, content, buffer);
             buffer.PopClip();
             return;
@@ -63,7 +66,7 @@ public static class Painter
                 var fg = run.Foreground == Color.Default ? style.Color : run.Foreground;
                 var bg = run.Background == Color.Default ? style.Background : run.Background;
                 x += buffer.PutText(x, y, run.Text, fg, bg, run.Style);
-                if (x >= content.Right) break;
+                if (x >= buffer.Clip.Right) break;
             }
         }
     }

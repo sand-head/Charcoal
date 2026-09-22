@@ -180,8 +180,9 @@ the web. See [docs/design.md](docs/design.md) for details.
 ## Not yet supported
 
 iTerm2 inline images; `!important`; pseudo-elements; `margin: auto`
-centring; horizontal scrolling in `ScrollBox`; list markers; and clicks on
-inline elements, which go to the block that holds them.
+centring; horizontal scrolling in the `ScrollBox` component, though the
+node's `ScrollLeft` works; list markers; and clicks on inline elements,
+which go to the block that holds them.
 
 ## Building
 

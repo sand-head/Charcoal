@@ -188,4 +188,26 @@ public class AnonymousTextTests
         Assert.Equal(TextWrap.Clip, leaf.Style.Wrap);
         Assert.Equal(new Size(8, 2), FlexLayout.Measure(leaf, 40, null));
     }
+
+    [Fact]
+    public void A_flex_or_grid_container_makes_each_inline_child_an_item_of_its_own()
+    {
+        var (renderer, _) = Render("""
+            <div id="row" style="display: flex; gap: 1"><span>a</span> <span>bb</span> tail</div>
+            <div id="grid" style="display: grid; grid-template-columns: 2 4 1fr"><span>1</span><span>2</span><span>3</span></div>
+            """);
+        var row = renderer.Root.Descendants().OfType<HostElement>().Single(e => e.Id == "row");
+        Assert.Equal(3, row.Node.Children.Count);   // a, bb, tail: the spaces between are formatting
+        Assert.All(row.Node.Children, child => Assert.IsType<AnonymousTextNode>(child));
+        FlexLayout.Layout(renderer.Root.Node, new Size(20, 4));
+        Assert.Equal(new Rect(0, 0, 1, 1), row.Node.Children[0].Layout);
+        Assert.Equal(new Rect(2, 0, 2, 1), row.Node.Children[1].Layout);
+        Assert.Equal(new Rect(5, 0, 4, 1), row.Node.Children[2].Layout);
+
+        var grid = renderer.Root.Descendants().OfType<HostElement>().Single(e => e.Id == "grid");
+        Assert.Equal(3, grid.Node.Children.Count);
+        Assert.Equal(new Rect(0, 1, 2, 1), grid.Node.Children[0].Layout);
+        Assert.Equal(new Rect(2, 1, 4, 1), grid.Node.Children[1].Layout);
+        Assert.Equal(new Rect(6, 1, 14, 1), grid.Node.Children[2].Layout);
+    }
 }

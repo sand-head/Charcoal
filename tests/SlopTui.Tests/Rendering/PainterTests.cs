@@ -205,7 +205,9 @@ public class PainterTests
         };
         Painter.Paint(canvas, buffer);
         Assert.Equal(new Rect(2, 0, 1, 1), given);
-        Assert.Equal("", Rows(buffer)[0].Trim());   // (0,0) is outside the clip; nothing landed
+        // The clip is a viewport: the write started outside it and only the
+        // cluster inside it landed, at its own column.
+        Assert.Equal("  c", Rows(buffer)[0]);
     }
 
     [Fact]
@@ -296,5 +298,27 @@ public class PainterTests
         Painter.Paint(box, buffer);
         Assert.Equal(Color.Blue, buffer[0, 0].Background);
         Assert.Equal("a", buffer[0, 0].Cluster);
+    }
+
+    [Fact]
+    public void A_line_scrolled_sideways_paints_its_visible_tail_and_a_wrapped_line_stays_in_its_box()
+    {
+        // A composer: a nowrap line in a clipping box, shifted 4 columns left.
+        var buffer = new CellBuffer(6, 1);
+        var line = new TextNode(new Style { WhiteSpace = WhiteSpace.NoWrap }, "abcdefghij") { At = new Rect(-4, 0, 6, 1) };
+        var box = Box(new Style { Overflow = Overflow.Hidden }, new Rect(0, 0, 6, 1), line);
+        Painter.Paint(box, buffer);
+        Assert.Equal("efghij", buffer.ToString());
+
+        // The cell buffer itself: clusters left of the clip take their columns without being drawn.
+        buffer = new CellBuffer(4, 1);
+        buffer.PushClip(new Rect(2, 0, 2, 1));
+        Assert.Equal(4, buffer.PutText(0, 0, "ab字", Color.Default, Color.Default, TextStyle.None));   // 字 straddles nothing: it is drawn at 2
+        Assert.Equal("字", buffer[2, 0].Cluster);
+        buffer = new CellBuffer(4, 1);
+        buffer.PushClip(new Rect(1, 0, 3, 1));
+        buffer.PutText(0, 0, "字cd", Color.Default, Color.Default, TextStyle.None);   // 字 straddles the edge: skipped, c and d land
+        Assert.Equal("", buffer[1, 0].Cluster.Trim());
+        Assert.Equal("c", buffer[2, 0].Cluster);
     }
 }

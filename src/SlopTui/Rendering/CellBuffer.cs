@@ -107,15 +107,25 @@ public sealed class CellBuffer
         return width;
     }
 
-    /// <summary>Writes text along one row, stopping at the clip.</summary>
-    /// <returns>The columns written.</returns>
+    /// <summary>
+    /// Writes text along one row. Clusters left of the clip take up their
+    /// columns without being drawn, and the first cluster past its right edge
+    /// ends the write.
+    /// </summary>
+    /// <returns>The columns used, drawn or not.</returns>
     public int PutText(int x, int y, string text, Color foreground, Color background, TextStyle style)
     {
         var used = 0;
         foreach (var (cluster, width) in TextWidth.Clusters(text))
         {
             if (width == 0) continue;
-            if (Put(x + used, y, cluster, width, foreground, background, style) == 0) break;
+            var at = x + used;
+            if (at < Clip.X)
+            {
+                used += width;
+                continue;
+            }
+            if (Put(at, y, cluster, width, foreground, background, style) == 0) break;
             used += width;
         }
         return used;

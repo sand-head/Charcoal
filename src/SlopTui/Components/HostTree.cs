@@ -479,11 +479,18 @@ public sealed class HostElement : HostNode
 
     private void Collect(HostNode node, List<LayoutNode> into, List<HostNode> inlineRun)
     {
+        // Flex and grid items are blockified: each inline element becomes an
+        // item of its own instead of joining the surrounding text.
+        var blockify = Node.Style.Display is Display.Flex or Display.Grid;
         foreach (var child in node.Children)
         {
             switch (child)
             {
                 case HostElement { Node.Style.Display: Display.None }:
+                    break;
+                case HostElement { IsInline: true } inline when blockify:
+                    EndInlineRun(into, inlineRun);
+                    into.Add(new AnonymousTextNode(this, [inline]));
                     break;
                 case HostElement { IsInline: true } inline:
                     inlineRun.Add(inline);

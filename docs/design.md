@@ -91,7 +91,8 @@ What an element does with its children follows its `display`:
 - **Inline**: not a box. Inline elements and the text around them, directly
   under a block, are grouped into an anonymous text leaf
   (`AnonymousTextNode`), as CSS wraps a block's inline content in anonymous
-  boxes. The leaf wraps as one text in the block's inherited text
+  boxes. Under a flex or grid container each inline element is an item of
+  its own, and each run of text between them is an anonymous item. The leaf wraps as one text in the block's inherited text
   properties, with each run in its own element's look, and stays current
   when its text changes or an ancestor restyles. A `br` is a forced line
   break. Whitespace follows the block's `white-space`: under `normal` runs
@@ -359,7 +360,11 @@ box it fills the background if one is set, draws the border in its
 padding box unless `overflow` is visible; `visibility: hidden` skips a
 subtree. A text leaf paints its wrapped lines (`TextLayout`) aligned by
 `text-align`, each run in its element's look, and a cluster without a
-background keeps the fill beneath it. A canvas calls its delegate with a
+background keeps the fill beneath it. Only a leaf's rows are clipped to its
+box: a line that does not wrap runs past it until an ancestor with
+`overflow: hidden`, or the screen, cuts it. Clusters left of the clip take
+up their columns without being drawn, so a box scrolled sideways with
+`ScrollLeft` shows the rest of the line. A canvas calls its delegate with a
 buffer clipped to its rect.
 
 `Screen` holds two `CellBuffer`s, shown and back. `Flush()` compares rows by
