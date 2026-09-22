@@ -20,6 +20,7 @@ public sealed class TerminalRenderer : Renderer
     private readonly Action<Exception> _onException;
     private readonly StyleContext? _styles;
     private readonly Graphics? _graphics;
+    private HostElement? _autofocus;
 
     public TerminalRenderer(IServiceProvider services, ILoggerFactory loggerFactory, TerminalDispatcher dispatcher, Action<Exception> onException, StyleContext? styles = null)
         : base(services, loggerFactory)
@@ -103,12 +104,45 @@ public sealed class TerminalRenderer : Renderer
     /// <summary>The element that owns an event handler, or null once the handler is gone.</summary>
     public HostElement? OwnerOf(ulong eventHandlerId) => _handlerOwners.GetValueOrDefault(eventHandlerId);
 
+    /// <summary>Raised after a render batch that inserted an element with <c>autofocus</c>.</summary>
+    public event Action<HostElement>? AutofocusRequested;
+
     /// <summary>Raises the element's handler for an event, returning false when it has none.</summary>
-    public async Task<bool> RaiseAsync(HostElement element, string eventName, EventArgs args)
+    /// <param name="fieldValue">
+    /// The element's current value, such as a field's text. It is sent with the
+    /// event, as a browser sends the DOM's value, so <c>@bind</c> sees it and the
+    /// next render does not restore the old one.
+    /// </param>
+    public async Task<bool> RaiseAsync(HostElement element, string eventName, EventArgs args, object? fieldValue = null)
     {
         if (element.HandlerFor(eventName) is not { } id) return false;
-        await DispatchEventAsync(id, null, args);
+
+        EventFieldInfo? field = null;
+        if (fieldValue is not null && ComponentIdOf(element) is { } componentId)
+        {
+            field = new EventFieldInfo { ComponentId = componentId, FieldValue = fieldValue };
+        }
+        await DispatchEventAsync(id, field, args);
         return true;
+    }
+
+    /// <summary>The component whose render tree holds the element.</summary>
+    private static int? ComponentIdOf(HostElement element)
+    {
+        for (var node = element.Parent; node is not null; node = node.Parent)
+        {
+            if (node is HostContainer { ComponentId: { } id }) return id;
+        }
+        return null;
+    }
+
+    private bool IsAttached(HostNode node)
+    {
+        for (HostNode? current = node; current is not null; current = current.Parent)
+        {
+            if (ReferenceEquals(current, Root)) return true;
+        }
+        return false;
     }
 
     protected override void HandleException(Exception exception) => _onException(exception);
@@ -141,7 +175,19 @@ public sealed class TerminalRenderer : Renderer
 
         Dirty = true;
         BatchApplied?.Invoke();
+        RequestAutofocus();
         return Task.CompletedTask;
+    }
+
+    private void RequestAutofocus()
+    {
+        var candidate = _autofocus;
+        _autofocus = null;
+        // The same batch may have removed the element again.
+        if (candidate is not null && IsAttached(candidate))
+        {
+            AutofocusRequested?.Invoke(candidate);
+        }
     }
 
     private void ApplyEdits(HostNode parent, int childIndex, ArrayBuilderSegment<RenderTreeEdit> edits, ArrayRange<RenderTreeFrame> frames)
@@ -320,6 +366,7 @@ public sealed class TerminalRenderer : Renderer
         {
             container.InsertChild(i, nodes[i]);
         }
+        _autofocus ??= container.Descendants().OfType<HostElement>().FirstOrDefault(element => element.Autofocus);
         return container;
     }
 
@@ -346,6 +393,10 @@ public sealed class TerminalRenderer : Renderer
             }
         }
         parent.InsertChild(childIndex, element);
+        if (element.Autofocus)
+        {
+            _autofocus ??= element;
+        }
         if (descendant < end) InsertFrameRange(element, 0, frames, descendant, end);
     }
 

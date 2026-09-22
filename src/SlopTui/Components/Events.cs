@@ -59,6 +59,19 @@ public sealed class PasteEventArgs : EventArgs
 [EventHandler("onfocus", typeof(FocusEventArgs), true, true)]
 [EventHandler("onblur", typeof(FocusEventArgs), true, true)]
 [EventHandler("onpaste", typeof(PasteEventArgs), true, true)]
+[EventHandler("oninput", typeof(ChangeEventArgs), true, true)]
+[EventHandler("onchange", typeof(ChangeEventArgs), true, true)]
 public static class EventHandlers
+{
+}
+
+/// <summary>
+/// <c>@bind</c> on form controls, as <c>Microsoft.AspNetCore.Components.Web</c>
+/// declares it for the DOM: <c>value</c> carries the text in and
+/// <c>onchange</c> carries it out.
+/// </summary>
+[BindElement("input", null, "value", "onchange")]
+[BindElement("textarea", null, "value", "onchange")]
+public static class BindAttributes
 {
 }

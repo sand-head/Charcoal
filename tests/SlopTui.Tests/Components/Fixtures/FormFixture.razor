@@ -1,0 +1,22 @@
+@* A form as a component writes it: bound fields, one of them live, one masked, one multi-line. *@
+<div class="form">
+    <input id="name" @bind="Name" @bind:event="oninput" placeholder="your name" autofocus />
+    <input id="secret" type="password" @bind="Secret" />
+    <textarea id="notes" rows="3" cols="10" @bind="Notes"></textarea>
+    <div id="echo">@Name|@Secret|@Notes.Replace("\n", "/")</div>
+</div>
+
+@code {
+    public static FormFixture? Last;
+
+    public string Name { get; set; } = "";
+    public string Secret { get; set; } = "";
+    public string Notes { get; set; } = "";
+
+    /// <summary>Renders counted so a test can tell a re-render happened.</summary>
+    public int Renders;
+
+    protected override void OnInitialized() => Last = this;
+
+    protected override void OnAfterRender(bool firstRender) => Renders++;
+}

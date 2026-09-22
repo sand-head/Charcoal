@@ -88,6 +88,14 @@ return new TuiApp().Run<App>();
   cells. Elsewhere it is drawn as half blocks in truecolour. Given one side,
   the other follows the image's shape; given neither, it shrinks to fit.
   `alt` shows when the source does not decode.
+- **Form controls.** `<input>` and `<textarea>` edit text with readline's
+  keys, paste, click-to-place caret, and soft-wrapped lines in a textarea.
+  `@bind` and `@bind:event="oninput"` work as on a page, as do `value`,
+  `placeholder`, `type="password"`, `disabled`, `readonly`, `maxlength`,
+  `size`, `rows`, `cols`, `wrap="off"` and `autofocus`. `@oninput` and
+  `@onchange` carry the value, and `:disabled`, `:enabled` and
+  `:placeholder-shown` style the controls. Your `@onkeypress` sees each key
+  first, so Enter or Up can submit or recall history.
 - **Blazor.** Parameters, `@key`, `@ref`, `EventCallback`, cascading values,
   `@inject`, `StateHasChanged` and `InvokeAsync` work as they do on the web.
 - **Flexbox and grid on cells.** Direction, wrap, justify, align (items,
@@ -107,7 +115,8 @@ return new TuiApp().Run<App>();
 - **Events.** `@onkeypress`, `@onclick`, `@onmouse`, `@onfocus`, `@onblur`
   and `@onpaste`. Keys go to the focused element and bubble up.
   `tabindex="0"` joins the Tab order, `tabindex="-1"` is focusable by click
-  only. `caret="col,row"` on a focused element places the terminal's cursor.
+  only. Form controls place the terminal's cursor at their caret, and
+  `caret="col,row"` does the same for any other focused element.
 - **Mouse selection.** Dragging selects text, and releasing copies it to the
   clipboard with OSC 52, which also works over ssh. Ctrl+C during a drag
   copies too. `user-select: none` keeps an element out of the selection and
@@ -130,6 +139,7 @@ Each one under `examples/` is a runnable project:
 | `Styled` | Cards styled by a global stylesheet: classes, ids, `:focus`, custom properties, inheritance, inline overrides. |
 | `Counter` | State, `:focus` from a scoped sheet, a timer, key and mouse handlers. |
 | `Picker` | A list with keyboard and mouse selection, rows that skip unchanged renders. |
+| `Form` | `input` and `textarea` with `@bind`, a placeholder, a password, `autofocus`, Tab between fields, `:focus` and `:placeholder-shown`. |
 | `Transcript` | A streaming, bottom-anchored transcript with a composer, entirely in components; `--bench` prints frame costs for 10,000 lines headless. |
 
 ```sh

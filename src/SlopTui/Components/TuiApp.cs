@@ -272,6 +272,7 @@ public sealed class TuiApp
         _renderer = new TerminalRenderer(provider, _loggerFactory, _dispatcher, OnException, _styles);
         _focus = new FocusManager(_renderer.Root, NotifyFocusAsync, work => _dispatcher.Post(work), _styles);
         _focus.Changed += (previous, current) => _renderer.FocusChanged(previous, current);
+        _renderer.AutofocusRequested += OnAutofocus;
         _styles.Sheets.Changed += OnStylesheetsChanged;
         _size = _terminal.Size;
         _screen = new Screen(_size.Width, _size.Height) { SynchronizedOutput = SynchronizedOutput };
@@ -355,8 +356,41 @@ public sealed class TuiApp
         Exit(1);
     }
 
-    private Task NotifyFocusAsync(HostElement element, bool gained) =>
-        _renderer!.RaiseAsync(element, gained ? "onfocus" : "onblur", new FocusEventArgs(gained));
+    private async Task NotifyFocusAsync(HostElement element, bool gained)
+    {
+        // Leaving a field commits its value before the blur.
+        if (!gained)
+        {
+            await CommitAsync(element);
+        }
+        await _renderer!.RaiseAsync(element, gained ? "onfocus" : "onblur", new FocusEventArgs(gained));
+    }
+
+    /// <summary>
+    /// Focuses an element with <c>autofocus</c> when nothing else has focus,
+    /// including when the focused element was removed in the same batch.
+    /// </summary>
+    private void OnAutofocus(HostElement element)
+    {
+        _focus!.DropIfDetached();
+        if (_focus.Focused is null)
+        {
+            _ = _focus.FocusAsync(element);
+        }
+    }
+
+    /// <summary>Raises <c>onchange</c> if the field's value changed since it was last committed.</summary>
+    private async Task CommitAsync(HostElement element)
+    {
+        if (element.Control is not { } control || !control.TakeChange(out var value)) return;
+        await _renderer!.RaiseAsync(element, "onchange", new ChangeEventArgs { Value = value }, value);
+    }
+
+    private Task InputAsync(HostElement element)
+    {
+        var value = element.Control!.Value;
+        return _renderer!.RaiseAsync(element, "oninput", new ChangeEventArgs { Value = value }, value);
+    }
 
     private void Loop()
     {
@@ -409,6 +443,11 @@ public sealed class TuiApp
     {
         _renderer!.Dirty = false;
         _focus!.DropIfDetached();
+        // A field disabled while focused loses focus, with a blur.
+        if (_focus.Focused is { Control.Disabled: true })
+        {
+            _ = _focus.FocusAsync(null);
+        }
         var layoutStart = Stopwatch.GetTimestamp();
         FlexLayout.Layout(_renderer.Root.Node, _size);
         if (_styles.UsesContainer)
@@ -526,6 +565,22 @@ public sealed class TuiApp
         var args = new KeyPressEventArgs(key);
         await BubbleAsync(_focus!.Focused, "onkeypress", args, () => args.Handled);
         if (args.Handled) return;
+
+        // Fields edit with the keys the handlers left. Enter in an input
+        // commits its value first.
+        if (_focus.Focused is { Control: { } control } field)
+        {
+            if (key.Key == Key.Enter && !control.Multiline && !key.Ctrl && !key.Alt)
+            {
+                await CommitAsync(field);
+            }
+            if (control.HandleKey(key, out var edited))
+            {
+                _renderer!.Dirty = true;
+                if (edited) await InputAsync(field);
+                return;
+            }
+        }
 
         // Ctrl+C copies while something is selected, and exits otherwise.
         if (key.IsCtrl('c') && Selection.Active)
@@ -657,6 +712,12 @@ public sealed class TuiApp
     {
         var args = new PasteEventArgs(paste.Text);
         await BubbleAsync(_focus!.Focused, "onpaste", args, () => args.Handled);
+        if (args.Handled) return;
+        if (_focus.Focused is { Control: { } control } field && control.Paste(paste.Text))
+        {
+            _renderer!.Dirty = true;
+            await InputAsync(field);
+        }
     }
 
     private async Task RouteMouseAsync(MouseEvent mouse)
@@ -675,10 +736,14 @@ public sealed class TuiApp
             if (args.Handled) return;
         }
         await BubbleAsync(target, "onmouse", args, () => args.Handled);
-        if (!args.Handled)
+        if (args.Handled) return;
+
+        var leftPress = mouse.Action == MouseAction.Pressed && mouse.Button == MouseButton.Left;
+        if (leftPress && target.Control is { } control && control.Click(mouse.X, mouse.Y))
         {
-            Select(mouse, target);
+            _renderer.Dirty = true;
         }
+        Select(mouse, target);
     }
 
     private async Task FocusClosestFocusableAsync(HostElement target)

@@ -1,0 +1,39 @@
+@inject TuiApp Tui
+
+<div class="app" @onkeypress="OnKey">
+    <div class="title">sign up · Tab and Shift+Tab move between fields · Enter submits · Ctrl+C quits</div>
+
+    <label>name</label>
+    <input @bind="_name" @bind:event="oninput" placeholder="ada lovelace" autofocus />
+
+    <label>password</label>
+    <input type="password" @bind="_password" @bind:event="oninput" maxlength="32" />
+
+    <label>notes</label>
+    <textarea @bind="_notes" @bind:event="oninput" rows="4" cols="48" placeholder="anything else? Enter makes a line here"></textarea>
+
+    <div class="muted">@_name.Length in the name · @_password.Length in the password · @NoteLines lines of notes</div>
+    @if (_submitted is { } who)
+    {
+        <div class="ok">✓ signed up @(who.Length == 0 ? "nobody" : who)</div>
+    }
+</div>
+
+@code {
+    private string _name = "";
+    private string _password = "";
+    private string _notes = "";
+    private string? _submitted;
+
+    private int NoteLines => _notes.Length == 0 ? 0 : _notes.Split('\n').Length;
+
+    private void OnKey(KeyPressEventArgs e)
+    {
+        // Enter submits, except in the textarea, where it starts a new line.
+        if (e.Key.Key == Key.Enter && Tui.Focus.Focused is { Control.Multiline: false })
+        {
+            _submitted = _name;
+            e.Handled = true;
+        }
+    }
+}

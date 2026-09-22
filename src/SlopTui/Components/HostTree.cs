@@ -144,8 +144,9 @@ public sealed class HostTextNode : HostNode
 /// <summary>
 /// An element under its HTML name, with its attributes and resolved style.
 /// A block, flex or grid element is a box the layout engine arranges; an
-/// inline element is a styled run of the text around it; <c>img</c> and
-/// <c>canvas</c> are leaves that paint themselves.
+/// inline element is a styled run of the text around it; <c>img</c>,
+/// <c>canvas</c>, <c>input</c> and <c>textarea</c> are leaves that paint
+/// themselves.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -184,6 +185,7 @@ public sealed class HostElement : HostNode
         IsBreak = Name == "br";
         IsImage = Name == "img";
         IsCanvas = Name == "canvas";
+        IsControl = Name is "input" or "textarea";
         Node = ElementLayoutNode.For(this);
         _styles = styles;
         _deferred = deferred;
@@ -207,7 +209,7 @@ public sealed class HostElement : HostNode
     public ElementLayoutNode Node { get; }
 
     /// <summary>Whether this element is a run within the text around it, as <c>display: inline</c> makes it.</summary>
-    public bool IsInline => Node.Style.IsInline && !IsImage && !IsCanvas;
+    public bool IsInline => Node.Style.IsInline && !IsImage && !IsCanvas && !IsControl;
 
     /// <summary>Whether this is a <c>&lt;br&gt;</c>.</summary>
     public bool IsBreak { get; }
@@ -216,7 +218,16 @@ public sealed class HostElement : HostNode
 
     public bool IsCanvas { get; }
 
-    /// <summary>Whether the element has a <c>tabindex</c>, so a click can focus it.</summary>
+    /// <summary>Whether this is an <c>&lt;input&gt;</c> or a <c>&lt;textarea&gt;</c>.</summary>
+    public bool IsControl { get; }
+
+    /// <summary>The form control's text, caret and attributes, or null for other elements.</summary>
+    public TextControlLayoutNode? Control => Node as TextControlLayoutNode;
+
+    /// <summary>Whether the element takes focus when it appears, if nothing else has it.</summary>
+    public bool Autofocus { get; private set; }
+
+    /// <summary>Whether the element has a <c>tabindex</c> or is an enabled form control, so a click can focus it.</summary>
     public bool Focusable { get; private set; }
 
     /// <summary>Whether Tab reaches this element, which takes a <c>tabindex</c> of zero or more.</summary>
@@ -227,9 +238,12 @@ public sealed class HostElement : HostNode
 
     /// <summary>
     /// Where the terminal caret goes while this element is focused, relative
-    /// to its content box, from the <c>caret="col,row"</c> attribute.
+    /// to its content box: a form control's caret, or the <c>caret="col,row"</c>
+    /// attribute.
     /// </summary>
-    public (int Column, int Row)? Caret { get; private set; }
+    public (int Column, int Row)? Caret => _caret ?? Control?.CaretCell;
+
+    private (int Column, int Row)? _caret;
 
     /// <summary>What a <c>canvas</c> element paints with.</summary>
     public Action<CellBuffer, Rect>? Painter { get; set; }
@@ -310,6 +324,7 @@ public sealed class HostElement : HostNode
         }
 
         if (Node is ImageLayoutNode image && changed is "src" or "alt") image.Reload();
+        if (Node is TextControlLayoutNode control) control.AttributesChanged(changed);
 
         var affectsDescendants = inheritedChanged || changed is not null and not "style";
         if (affectsDescendants) RestyleDescendants();
@@ -387,9 +402,12 @@ public sealed class HostElement : HostNode
         Classes = _attributes.TryGetValue("class", out var classes) ? ParseClasses(classes) : NoClasses;
         InlineStyle = _attributes.TryGetValue("style", out var style) && style is string { Length: > 0 } css ? css : null;
         var tabIndex = _attributes.TryGetValue("tabindex", out var tab) ? ParseTabIndex(tab) : null;
-        Focusable = tabIndex is not null;
-        Tabbable = tabIndex is >= 0;
-        Caret = _attributes.TryGetValue("caret", out var caret) ? ParseCaret(caret) : null;
+        // Enabled form controls are focusable and tabbable without a tabindex.
+        var enabledControl = IsControl && _attributes.GetValueOrDefault("disabled") is null or false;
+        Focusable = tabIndex is not null || enabledControl;
+        Tabbable = tabIndex is >= 0 || (enabledControl && tabIndex is null);
+        Autofocus = _attributes.GetValueOrDefault("autofocus") is not (null or false);
+        _caret = _attributes.TryGetValue("caret", out var caret) ? ParseCaret(caret) : null;
     }
 
     private static int? ParseTabIndex(object? value) => value switch
@@ -439,6 +457,10 @@ public sealed class HostElement : HostNode
 
     internal void DescendantsChanged(bool structural)
     {
+        if (Node is TextControlLayoutNode control)
+        {
+            control.ContentChanged();
+        }
         if (structural)
         {
             _layoutChildren = null;
@@ -465,7 +487,7 @@ public sealed class HostElement : HostNode
         {
             if (_layoutChildren is not null) return _layoutChildren;
             var children = new List<LayoutNode>();
-            if (!IsInline && !IsCanvas && !IsImage)
+            if (!IsInline && !IsCanvas && !IsImage && !IsControl)
             {
                 var inlineRun = new List<HostNode>();
                 Collect(this, children, inlineRun);
@@ -609,6 +631,7 @@ public class ElementLayoutNode : LayoutNode
     {
         if (element.IsCanvas) return new CanvasLayoutNode(element);
         if (element.IsImage) return new ImageLayoutNode(element);
+        if (element.IsControl) return new TextControlLayoutNode(element);
         return new ElementLayoutNode(element);
     }
 }

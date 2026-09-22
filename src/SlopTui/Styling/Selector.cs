@@ -40,6 +40,9 @@ public enum PseudoClass
     Root = 4,
     FirstChild = 8,
     LastChild = 16,
+    Disabled = 32,
+    Enabled = 64,
+    PlaceholderShown = 128,
 }
 
 /// <summary>
@@ -81,8 +84,18 @@ public sealed record CompoundSelector(
         if (Has(PseudoClass.Root) && element.Parent?.ClosestElement is not null) return false;
         if (Has(PseudoClass.FirstChild) && !IsFirstChild(element)) return false;
         if (Has(PseudoClass.LastChild) && !IsLastChild(element)) return false;
+        if (Has(PseudoClass.Disabled) && !IsDisabled(element)) return false;
+        if (Has(PseudoClass.Enabled) && (!IsFormControl(element) || IsDisabled(element))) return false;
+        if (Has(PseudoClass.PlaceholderShown) && element.Control is not { PlaceholderShown: true }) return false;
         return true;
     }
+
+    /// <summary>The elements that <c>:enabled</c> and <c>:disabled</c> apply to.</summary>
+    private static bool IsFormControl(HostElement element) =>
+        element.Name is "input" or "textarea" or "button" or "select" or "option" or "optgroup" or "fieldset";
+
+    private static bool IsDisabled(HostElement element) =>
+        IsFormControl(element) && element.Attributes.GetValueOrDefault("disabled") is not (null or false);
 
     private static bool Contains(HostElement element, HostElement? focused)
     {
@@ -132,6 +145,9 @@ public sealed record CompoundSelector(
         if (Has(PseudoClass.Root)) text.Append(":root");
         if (Has(PseudoClass.FirstChild)) text.Append(":first-child");
         if (Has(PseudoClass.LastChild)) text.Append(":last-child");
+        if (Has(PseudoClass.Disabled)) text.Append(":disabled");
+        if (Has(PseudoClass.Enabled)) text.Append(":enabled");
+        if (Has(PseudoClass.PlaceholderShown)) text.Append(":placeholder-shown");
         return text.Length == 0 ? "*" : text.ToString();
     }
 }
@@ -220,6 +236,9 @@ public sealed class Selector
             ["root"] = PseudoClass.Root,
             ["first-child"] = PseudoClass.FirstChild,
             ["last-child"] = PseudoClass.LastChild,
+            ["disabled"] = PseudoClass.Disabled,
+            ["enabled"] = PseudoClass.Enabled,
+            ["placeholder-shown"] = PseudoClass.PlaceholderShown,
         };
 
         private int _position;

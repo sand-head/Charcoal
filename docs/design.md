@@ -109,15 +109,16 @@ self-closing tags, comments, entities, and text as written. Its nodes go in
 a container and are restyled when the container is inserted, so they
 resolve against their real ancestors.
 
-Attributes are HTML's: `class`, `id`, `style`, `tabindex`, `src`, `alt`,
-`hidden`, `width` and `height` on `img` (applied where the cascade sets no
-size), and the event attributes. `@ref` works: the renderer records each
+Attributes are HTML's: `class`, `id`, `style`, `tabindex`, `autofocus`,
+`src`, `alt`, `hidden`, `width` and `height` on `img` (applied where the
+cascade sets no size), the form control attributes, and the event
+attributes. `@ref` works: the renderer records each
 captured reference, and `TerminalRenderer.Element(ref)` returns the
 `HostElement`. Components use it to reach an element's state, such as a
 scroll position (`node.ScrollTop`) or a canvas painter (`element.Painter`),
 where a page would use JavaScript interop. The one attribute HTML does not
 have is `caret="col,row"`, which places the terminal's cursor in the
-focused element's content box.
+focused element's content box. Form controls place it at their own caret.
 
 **`img`** is a leaf showing a decoded picture (`ImageLayoutNode`). `src` is
 a file path or a `data:` URI; `ImageDecoder` uses StbImageSharp, and a
@@ -160,6 +161,28 @@ cropped to its visible cells because the terminal cannot clip it. Mode 8452
 keeps a picture on the last row from scrolling the screen, and mode 1070
 gives each picture its own colour registers. Encodings are cached per
 placement. iTerm2 inline images are not supported.
+
+**`input` and `textarea`** are leaves that edit text
+(`TextControlLayoutNode`). The editing model is `TextEditor`, which knows
+nothing of the terminal. It keeps the caret on grapheme boundaries,
+implements readline's keys, and lays a textarea's text out in visual lines,
+breaking at newlines and after the last space that fits. Vertical moves keep
+their column, and clicks, the painted caret and Up and Down all use the same
+layout. An `input` replaces newlines with spaces, and a password field shows
+one bullet per cluster.
+
+The node reads the control's attributes. `value` replaces the text when the
+element first resolves and whenever the attribute changes, but not on a
+restyle, which would overwrite typed text. `placeholder` shows dimmed while
+the field is empty. `disabled` removes it from focus and the user-agent
+sheet dims it; `readonly` keeps the caret but refuses edits. `size`, `rows`
+and `cols` give the intrinsic size, 20×1 or 20×2, which the user-agent
+sheet's `width: fit-content` uses. A textarea's text content is its default
+value until the user edits it. The node paints its lines scrolled just
+enough to keep the caret visible and remembers the caret's cell for the
+terminal cursor. Enabled controls are focusable and tabbable without a
+`tabindex`, and `autofocus` takes focus when the element appears and nothing
+else has it. `:disabled`, `:enabled` and `:placeholder-shown` match them.
 
 **`canvas`** is a leaf painted by a delegate on the element (`Painter`). The
 `Canvas` component captures its element with `@ref` and sets the delegate
@@ -388,7 +411,22 @@ then bubbles to each ancestor's, then to the root's; the first handler that
 sets `Handled` stops it. Focus lives in `FocusManager`: an element with a
 `tabindex` can take focus, and one with a non-negative `tabindex` is in the
 Tab cycle, in tree order. `Tab` and `Shift+Tab` move focus unless a handler
-took the key. Mouse events hit-test the arranged tree and dispatch `@onclick`
+took the key.
+
+A key no handler took goes to the focused form control before those
+defaults, as on a page, so a component's `@onkeypress` can turn Enter or Up
+into a submit or a history recall. An edit raises `@oninput` with the value.
+Unhandled pastes go in at the caret, and an unhandled left click places the
+caret. Enter in an `input` and losing focus raise `@onchange` when the value
+changed since it was last committed, which is what `@bind` listens to. Both
+events carry the value into the render tree with Blazor's `EventFieldInfo`,
+as the browser renderer does, so the next render does not restore the old
+text. `BindAttributes` declares the bind rules with `[BindElement]`. The
+Razor compiler only generates element bind code when
+`BindInputElementAttribute` is in the compilation, so the library references
+`Microsoft.AspNetCore.Components.Web` without importing its namespace.
+
+Mouse events hit-test the arranged tree and dispatch `@onclick`
 (and `@onmouse` for everything else) from the deepest box outward; a left
 click focuses the nearest focusable element. `@onfocus` / `@onblur` fire on
 change.

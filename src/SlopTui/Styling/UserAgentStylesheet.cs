@@ -5,8 +5,9 @@ namespace SlopTui.Styling;
 /// with margins in cells.
 /// </summary>
 /// <remarks>
-/// Unlike a browser's, <c>body</c> has no margin, and <c>img</c> and
-/// <c>canvas</c> are blocks, since a picture cannot sit inside a line of text.
+/// Unlike a browser's, <c>body</c> has no margin, and <c>img</c>, <c>canvas</c>
+/// and the form controls are blocks that fit their content, since a picture
+/// or a field cannot sit inside a line of text.
 /// </remarks>
 public static class UserAgentStylesheet
 {
@@ -14,7 +15,11 @@ public static class UserAgentStylesheet
         html, body, div, p, section, article, main, header, footer, nav, aside,
         ul, ol, li, pre, blockquote, h1, h2, h3, h4, h5, h6, hr, form, fieldset,
         figure, figcaption, address, dl, dt, dd, details, summary, menu, dialog,
-        table, thead, tbody, tfoot, tr, td, th, canvas, img, textarea { display: block }
+        table, thead, tbody, tfoot, tr, td, th, canvas, img, input, textarea { display: block }
+
+        input, textarea { width: fit-content }
+        input[type="hidden"] { display: none }
+        input:disabled, textarea:disabled { opacity: 0.5 }
 
         h1, h2, h3, h4, h5, h6, strong, b, th { font-weight: bold }
         em, i, cite, dfn, var, address { font-style: italic }

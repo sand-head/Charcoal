@@ -9,6 +9,9 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components" Version="10.0.12" />
+    <!-- The Razor compiler only generates element @bind code when BindInputElementAttribute
+         is in the compilation. The package's namespace is never imported. -->
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
     <PackageReference Include="Wcwidth" Version="4.0.1" />

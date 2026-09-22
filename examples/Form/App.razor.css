@@ -1,0 +1,8 @@
+.app { display: flex; flex-direction: column; padding: 1 2; height: 100% }
+.title { font-weight: bold; margin-bottom: 1 }
+label { opacity: 0.5; margin-top: 1 }
+input, textarea { border: solid; padding: 0 1; width: 50 }
+input:focus, textarea:focus { border-color: cyan }
+input:placeholder-shown { font-style: italic }
+.muted { opacity: 0.5; margin-top: 1 }
+.ok { color: green; font-weight: bold }
