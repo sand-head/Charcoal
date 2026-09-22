@@ -75,6 +75,9 @@ public static class StyleParser
         ["overflow"] = (s, v) => s with { Overflow = OverflowOf(v, "overflow") },
         ["overflow-x"] = (s, v) => s with { Overflow = OverflowOf(v, "overflow-x") },
         ["overflow-y"] = (s, v) => s with { Overflow = OverflowOf(v, "overflow-y") },
+        ["container-type"] = (s, v) => s with { ContainerType = ContainerTypeOf(v) },
+        ["container-name"] = (s, v) => s with { ContainerNames = ContainerNamesOf(v) },
+        ["container"] = Container,
         ["top"] = (s, v) => s with { Top = NullableCells(v, "top") },
         ["right"] = (s, v) => s with { Right = NullableCells(v, "right") },
         ["bottom"] = (s, v) => s with { Bottom = NullableCells(v, "bottom") },
@@ -762,6 +765,39 @@ public static class StyleParser
         var argument = text[(at + "invert(".Length)..close].Trim();
         var amount = argument.Length == 0 ? 1 : Amount(argument, "filter");
         return amount >= 0.5 ? SetFlag(style, TextStyle.Inverse) : ClearFlag(style, TextStyle.Inverse);
+    }
+
+    private static ContainerType ContainerTypeOf(object? value)
+    {
+        if (value is ContainerType t) return t;
+        return Text(value).ToLowerInvariant() switch
+        {
+            "normal" => ContainerType.Normal,
+            "size" => ContainerType.Size,
+            "inline-size" => ContainerType.InlineSize,
+            _ => throw Bad("container-type", value),
+        };
+    }
+
+    private static IReadOnlyList<string> ContainerNamesOf(object? value)
+    {
+        if (value is IReadOnlyList<string> list) return list;
+        var text = Text(value);
+        if (text.Length == 0 || text.Equals("none", StringComparison.OrdinalIgnoreCase)) return [];
+
+        var names = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (names.Any(name => !char.IsLetter(name[0]) && name[0] != '_')) throw Bad("container-name", value);
+        return names;
+    }
+
+    /// <summary>The <c>container</c> shorthand: <c>names [/ type]</c>.</summary>
+    private static Style Container(Style style, object? value)
+    {
+        var text = Text(value);
+        var slash = text.IndexOf('/');
+        var names = slash < 0 ? text : text[..slash];
+        var type = slash < 0 ? "normal" : text[(slash + 1)..].Trim();
+        return style with { ContainerNames = ContainerNamesOf(names.Trim()), ContainerType = ContainerTypeOf(type) };
     }
 
     private static WhiteSpace WhiteSpaceOf(object? value)

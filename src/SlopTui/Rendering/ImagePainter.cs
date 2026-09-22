@@ -61,6 +61,16 @@ public static class ImagePainter
             KittyGraphics.PaintPlaceholders(buffer, rect, id);
             return;
         }
+        if (graphics is { UsesSixel: true })
+        {
+            // Blank the covered cells so the diff clears what was under the
+            // picture, which goes out after the diff.
+            var visible = rect.Intersect(buffer.Clip);
+            if (visible.IsEmpty) return;
+            buffer.Fill(visible, Cell.Blank);
+            graphics.PlaceSixel(image, rect, visible);
+            return;
+        }
         Paint(buffer, rect, image);
     }
 
@@ -96,7 +106,7 @@ public static class ImagePainter
     }
 
     /// <summary>The alpha-weighted average colour under one sample, and whether it is mostly opaque.</summary>
-    private static (Color Color, bool Opaque) Sample(ImageData image, int sx, int sy, int columns, int rows)
+    internal static (Color Color, bool Opaque) Sample(ImageData image, int sx, int sy, int columns, int rows)
     {
         var x0 = sx * image.Width / columns;
         var x1 = Math.Min(image.Width, Math.Max(x0 + 1, (sx + 1) * image.Width / columns));

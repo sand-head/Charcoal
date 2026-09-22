@@ -234,6 +234,21 @@ public sealed class HostElement : HostNode
     /// <summary>What a <c>canvas</c> element paints with.</summary>
     public Action<CellBuffer, Rect>? Painter { get; set; }
 
+    /// <summary>
+    /// For a query container, the media environment with its content box as
+    /// the size, which its <c>@container</c> rules are evaluated against.
+    /// Null until the element has been laid out.
+    /// </summary>
+    public MediaEnvironment? ContainerEnvironment { get; private set; }
+
+    /// <summary>Records the container's laid-out content box, returning whether it changed.</summary>
+    internal bool SetContainerSize(Size size)
+    {
+        if (ContainerEnvironment is { } known && known.Width == size.Width && known.Height == size.Height) return false;
+        ContainerEnvironment = (_styles?.Media ?? MediaEnvironment.Default) with { Width = size.Width, Height = size.Height };
+        return true;
+    }
+
     public IReadOnlyDictionary<string, object?> Attributes => _attributes;
 
     /// <summary>Blazor event handler ids by attribute name, such as <c>onkeypress</c>.</summary>

@@ -10,14 +10,20 @@ public sealed record Declaration(string Name, string Value, bool Known)
     public bool IsCustom => StyleParser.IsCustomProperty(Name);
 }
 
-/// <summary>A rule, its position in the sheet, and the <c>@media</c> condition it sits under.</summary>
-public sealed record StyleRule(IReadOnlyList<Selector> Selectors, IReadOnlyList<Declaration> Declarations, int Order, MediaQueryList? Media = null);
+/// <summary>A rule, its position in the sheet, and the <c>@media</c> and <c>@container</c> conditions it sits under.</summary>
+public sealed record StyleRule(
+    IReadOnlyList<Selector> Selectors,
+    IReadOnlyList<Declaration> Declarations,
+    int Order,
+    MediaQueryList? Media = null,
+    ContainerQuery? Container = null);
 
 /// <summary>
 /// A parsed stylesheet: selector lists, comments, custom properties,
-/// declarations, <c>@media</c> blocks (nested ones combine with <c>and</c>)
-/// and <c>@supports</c> blocks, which are decided at parse time. Other
-/// at-rules are skipped with a warning, and <c>!important</c> is ignored.
+/// declarations, <c>@media</c> blocks (nested ones combine with <c>and</c>),
+/// <c>@container</c> blocks, and <c>@supports</c> blocks, which are decided
+/// at parse time. Other at-rules are skipped with a warning, and
+/// <c>!important</c> is ignored.
 /// </summary>
 /// <remarks>
 /// A bad value fails the parse with its line, selector and property. A CSS
@@ -49,23 +55,29 @@ public sealed class Stylesheet
     /// <summary>Whether any rule sits under <c>@media</c>, so a change to the environment restyles.</summary>
     public bool UsesMedia => Rules.Any(r => r.Media is not null);
 
+    /// <summary>Whether any rule sits under <c>@container</c>, so containers are measured after each layout.</summary>
+    public bool UsesContainer => Rules.Any(r => r.Container is not null);
+
     /// <exception cref="FormatException">The CSS is malformed; the message names the line.</exception>
     public static Stylesheet Parse(string css)
     {
         ArgumentNullException.ThrowIfNull(css);
         var text = StripComments(css);
         var reader = new SheetReader(text);
-        reader.ReadRules(0, text.Length, media: null);
+        reader.ReadRules(0, text.Length, new BlockConditions(null, null));
         return new Stylesheet(reader.Rules, reader.Warnings, css);
     }
+
+    /// <summary>The conditions of the blocks a rule sits in.</summary>
+    private readonly record struct BlockConditions(MediaQueryList? Media, ContainerQuery? Container);
 
     private sealed class SheetReader(string text)
     {
         public List<StyleRule> Rules { get; } = [];
         public List<string> Warnings { get; } = [];
 
-        /// <summary>Reads the rules up to <paramref name="end"/>, each under <paramref name="media"/>.</summary>
-        public void ReadRules(int position, int end, MediaQueryList? media)
+        /// <summary>Reads the rules up to <paramref name="end"/>, each under the given block conditions.</summary>
+        public void ReadRules(int position, int end, BlockConditions conditions)
         {
             while (true)
             {
@@ -74,22 +86,22 @@ public sealed class Stylesheet
 
                 if (text[position] == '@')
                 {
-                    position = ReadAtRule(position, end, media);
+                    position = ReadAtRule(position, end, conditions);
                 }
                 else
                 {
-                    Rules.Add(ReadRule(ref position, end, media));
+                    Rules.Add(ReadRule(ref position, end, conditions));
                 }
             }
         }
 
-        /// <summary>Reads an <c>@media</c> or <c>@supports</c> block, or skips any other at-rule.</summary>
-        private int ReadAtRule(int start, int end, MediaQueryList? media)
+        /// <summary>Reads an <c>@media</c>, <c>@container</c> or <c>@supports</c> block, or skips any other at-rule.</summary>
+        private int ReadAtRule(int start, int end, BlockConditions conditions)
         {
             var nameEnd = start + 1;
             while (nameEnd < end && (char.IsLetterOrDigit(text[nameEnd]) || text[nameEnd] == '-')) nameEnd++;
             var name = text[(start + 1)..nameEnd].ToLowerInvariant();
-            if (name is not ("media" or "supports")) return SkipAtRule(start);
+            if (name is not ("media" or "supports" or "container")) return SkipAtRule(start);
 
             var line = LineOf(text, start);
             var open = text.IndexOf('{', nameEnd);
@@ -101,11 +113,21 @@ public sealed class Stylesheet
             if (name == "media")
             {
                 var list = WithLine(line, () => MediaQueryList.Parse(prelude));
-                ReadRules(open + 1, close, media is null ? list : MediaQueryList.And(media, list));
+                var media = conditions.Media is null ? list : MediaQueryList.And(conditions.Media, list);
+                ReadRules(open + 1, close, conditions with { Media = media });
+            }
+            else if (name == "container")
+            {
+                var query = WithLine(line, () => ContainerQuery.Parse(prelude));
+                if (conditions.Container is not null)
+                {
+                    throw new FormatException($"line {line}: '@container' inside '@container' is not supported; nest the condition instead.");
+                }
+                ReadRules(open + 1, close, conditions with { Container = query });
             }
             else if (WithLine(line, () => SupportsCondition.Evaluate(prelude)))
             {
-                ReadRules(open + 1, close, media);
+                ReadRules(open + 1, close, conditions);
             }
             else
             {
@@ -126,7 +148,7 @@ public sealed class Stylesheet
             }
         }
 
-        private StyleRule ReadRule(ref int position, int end, MediaQueryList? media)
+        private StyleRule ReadRule(ref int position, int end, BlockConditions conditions)
         {
             var start = position;
             var line = LineOf(text, start);
@@ -145,7 +167,7 @@ public sealed class Stylesheet
             var body = new RuleBody(text[(open + 1)..close], selectorText, LineOf(text, open));
             var declarations = ParseDeclarations(body, Warnings);
             position = close + 1;
-            return new StyleRule(selectors, declarations, Rules.Count, media);
+            return new StyleRule(selectors, declarations, Rules.Count, conditions.Media, conditions.Container);
         }
 
         /// <summary>Skips a statement at-rule or a block at-rule and returns the position after it.</summary>

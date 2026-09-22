@@ -83,8 +83,12 @@ public static class FlexLayout
         else
         {
             var content = MeasureContentBox(node, innerWidth, innerHeight);
-            width = explicitWidth ?? content.Width + inset.Horizontal;
-            height = explicitHeight ?? content.Height + inset.Vertical;
+            // A query container's size on a contained axis cannot depend on its
+            // content, since the content's rules depend on that size.
+            var contentWidth = style.Contains(widthAxis: true) ? 0 : content.Width;
+            var contentHeight = style.Contains(widthAxis: false) ? 0 : content.Height;
+            width = explicitWidth ?? contentWidth + inset.Horizontal;
+            height = explicitHeight ?? contentHeight + inset.Vertical;
         }
 
         width = Clamp(width, style.MinWidth.Resolve(availableWidth), style.MaxWidth.Resolve(availableWidth));
@@ -349,6 +353,7 @@ public static class FlexLayout
         var style = node.Style;
         if (style.Display == Display.None) return 0;
         if (style.Overflow != Overflow.Visible) return 0;
+        if (style.Contains(widthAxis)) return widthAxis ? style.Inset.Horizontal : style.Inset.Vertical;
 
         var availOwn = widthAxis ? availW : availH;
         var explicitSize = (widthAxis ? style.Width : style.Height).Resolve(availOwn);

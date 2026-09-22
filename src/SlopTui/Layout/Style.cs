@@ -33,6 +33,12 @@ public enum Position { Relative, Absolute }
 public enum Visibility { Visible, Hidden }
 
 /// <summary>
+/// CSS <c>container-type</c>, which makes a query container for
+/// <c>@container</c>. The contained axes take no size from the content.
+/// </summary>
+public enum ContainerType { Normal, InlineSize, Size }
+
+/// <summary>
 /// CSS <c>border-style</c>. Solid is a single line, rounded with a
 /// <c>border-radius</c> and heavy with a <c>thick</c> width; dashed and
 /// dotted are drawn in ASCII.
@@ -175,6 +181,12 @@ public sealed record Style
     public Overflow Overflow { get; init; } = Overflow.Visible;
     public Visibility Visibility { get; init; } = Visibility.Visible;
 
+    // Container queries
+    public ContainerType ContainerType { get; init; } = ContainerType.Normal;
+
+    /// <summary>The names <c>@container name (…)</c> can address this container by.</summary>
+    public IReadOnlyList<string> ContainerNames { get; init; } = [];
+
     // Grid
     /// <summary>Empty means one auto column.</summary>
     public IReadOnlyList<Track> GridTemplateColumns { get; init; } = [];
@@ -296,6 +308,10 @@ public sealed record Style
     }
 
     public bool IsInline => Display == Display.Inline;
+
+    /// <summary>Whether size containment applies on the axis, so the content adds nothing to the size there.</summary>
+    public bool Contains(bool widthAxis) =>
+        ContainerType == ContainerType.Size || (widthAxis && ContainerType == ContainerType.InlineSize);
 }
 
 public enum Side { Top, Right, Bottom, Left }

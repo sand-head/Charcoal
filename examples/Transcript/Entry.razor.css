@@ -5,7 +5,7 @@
 .text { flex: 1 }
 
 /* Without room for the speaker column, the text's colour shows who spoke. */
-@media (max-width: 60) {
+@container transcript (max-width: 60) {
     .who { display: none }
     .entry.you .text { color: cyan }
 }

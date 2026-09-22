@@ -41,6 +41,8 @@ public sealed record TuiAppOptions
 /// </remarks>
 public sealed class TuiApp
 {
+    private const int MaxContainerPasses = 3;
+
     private readonly TerminalDispatcher _dispatcher = new();
     private readonly InputPump _pump = new();
     private readonly ITerminal _terminal;
@@ -56,6 +58,7 @@ public sealed class TuiApp
     private volatile bool _resized;
     private Size _size;
     private string _startup = "";
+    private bool _sixelRepaint;
 
     public TuiApp(ITerminal? terminal = null, TuiAppOptions? options = null, ILoggerFactory? loggerFactory = null)
     {
@@ -358,6 +361,7 @@ public sealed class TuiApp
                 SetMedia(_styles.Media with { Width = _size.Width, Height = _size.Height });
                 _renderer!.SetViewport(_size);
                 _screen!.Resize(_size.Width, _size.Height);
+                _sixelRepaint = true;
                 _renderer.Dirty = true;
             }
 
@@ -394,15 +398,22 @@ public sealed class TuiApp
         _focus!.DropIfDetached();
         var layoutStart = Stopwatch.GetTimestamp();
         FlexLayout.Layout(_renderer.Root.Node, _size);
+        if (_styles.UsesContainer)
+        {
+            ContainerPass();
+        }
 
         var paintStart = Stopwatch.GetTimestamp();
         _screen!.Back.Fill(Cell.Blank);
+        Graphics.BeginFrame();
         Painter.Paint(_renderer.Root.Node, _screen.Back);
         Overlay?.Invoke(_screen.Back);
         PlaceCursor();
 
         var flushStart = Stopwatch.GetTimestamp();
-        var frame = _screen.Flush();
+        var resendSixels = _sixelRepaint;
+        _sixelRepaint = false;
+        var frame = _screen.Flush(rows => Graphics.SixelOutput(rows, resendSixels));
         // Images go ahead of the frame that shows them, in the same write.
         if (Graphics.HasPending) frame = Graphics.TakePending() + frame;
         if (_startup.Length > 0)
@@ -420,6 +431,38 @@ public sealed class TuiApp
             Flush: Stopwatch.GetElapsedTime(flushStart, flushEnd),
             Bytes: frame.Length);
         FramePainted?.Invoke(LastFrame);
+    }
+
+    /// <summary>
+    /// Restyles the descendants of every query container whose size changed in
+    /// the last layout, and lays out again when any did. A container's size does
+    /// not depend on its contents, so this settles quickly; the cap stops rules
+    /// that fight each other.
+    /// </summary>
+    private void ContainerPass()
+    {
+        for (var pass = 0; pass < MaxContainerPasses; pass++)
+        {
+            var changed = false;
+            foreach (var node in _renderer!.Root.Descendants())
+            {
+                if (node is HostElement { Node.Style.ContainerType: not ContainerType.Normal } container && UpdateContainer(container))
+                {
+                    changed = true;
+                }
+            }
+            if (!changed) return;
+            FlexLayout.Layout(_renderer.Root.Node, _size);
+        }
+    }
+
+    private static bool UpdateContainer(HostElement container)
+    {
+        var box = container.Node.Layout.Deflate(container.Node.Style.Inset);
+        var size = new Size(Math.Max(0, box.Width), Math.Max(0, box.Height));
+        if (!container.SetContainerSize(size)) return false;
+        container.RestyleDescendants();
+        return true;
     }
 
     private void PlaceCursor()
@@ -501,10 +544,19 @@ public sealed class TuiApp
         else if (TryParseCellPixels(sequence, out var cellPixels))
         {
             Graphics.CellPixels = cellPixels;
+            SetMedia(_styles.Media with { CellPixelWidth = cellPixels.Width, CellPixelHeight = cellPixels.Height });
             RepaintPictures();
         }
         else if (sequence.StartsWith("\e[?", StringComparison.Ordinal) && sequence.EndsWith('c'))
         {
+            // Primary device attributes; attribute 4 is Sixel graphics.
+            var attributes = sequence[3..^1].Split(';');
+            if (attributes.Contains("4") && !Graphics.Sixel)
+            {
+                Graphics.Sixel = true;
+                _sixelRepaint = true;
+                RepaintPictures();
+            }
             Graphics.Detected = true;
         }
         else if (sequence.StartsWith("\e]11;", StringComparison.Ordinal) && TryParseOscColor(sequence[5..], out var background))

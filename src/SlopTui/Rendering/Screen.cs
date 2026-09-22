@@ -14,6 +14,7 @@ public sealed class Screen
 
     private readonly StringBuilder _output = new();
     private CellBuffer _shown;
+    private bool[] _rowChanged;
     private (Color Fg, Color Bg, TextStyle Style)? _pen;
     private (int X, int Y)? _shownCursor;
     private bool _shownCursorVisible;
@@ -23,6 +24,7 @@ public sealed class Screen
         _shown = new CellBuffer(width, height);
         _shown.Fill(Unknown);
         Back = new CellBuffer(width, height);
+        _rowChanged = new bool[height];
     }
 
     public CellBuffer Back { get; private set; }
@@ -43,6 +45,7 @@ public sealed class Screen
     {
         Back = new CellBuffer(width, height);
         _shown = new CellBuffer(width, height);
+        _rowChanged = new bool[height];
         Invalidate();
     }
 
@@ -56,29 +59,42 @@ public sealed class Screen
     }
 
     /// <summary>The escape codes for everything that changed, or an empty string.</summary>
-    public string Flush()
+    public string Flush() => Flush(null);
+
+    /// <summary>
+    /// As <see cref="Flush()"/>, appending the output of <paramref name="trailer"/>,
+    /// which is told the rows this frame repainted, before the cursor is placed.
+    /// </summary>
+    public string Flush(Func<bool[], string>? trailer)
     {
         _output.Clear();
         _pen = null;
+        Array.Fill(_rowChanged, false);
 
         var body = Paint();
+        var trailing = trailer?.Invoke(_rowChanged) ?? "";
+        var drawing = body.Length > 0 || trailing.Length > 0;
         var cursorChanged = Cursor != _shownCursor || CursorVisible != _shownCursorVisible;
-        if (body.Length == 0 && !cursorChanged) return "";
+        if (!drawing && !cursorChanged) return "";
 
         var frame = new StringBuilder();
         if (SynchronizedOutput) frame.Append("\e[?2026h");
-        if (body.Length > 0)
+        if (drawing)
         {
             frame.Append("\e[?25l");
+        }
+        if (body.Length > 0)
+        {
             frame.Append(body);
             frame.Append("\e[0m");
         }
+        frame.Append(trailing);
         if (CursorVisible && Cursor is { } cursor)
         {
             frame.Append(Position(cursor.X, cursor.Y));
             frame.Append("\e[?25h");
         }
-        else if (body.Length == 0)
+        else if (!drawing)
         {
             frame.Append("\e[?25l");
         }
@@ -95,6 +111,7 @@ public sealed class Screen
         for (var y = 0; y < Back.Height; y++)
         {
             if (_shown.RowHash(y) == Back.RowHash(y)) continue;
+            _rowChanged[y] = true;
 
             var (first, last) = Bounds(y);
             if (first < 0) continue;

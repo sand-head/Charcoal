@@ -76,6 +76,7 @@ public static class StyleResolver
             foreach (var rule in sheet.Rules)
             {
                 if (rule.Media is { } query && !query.Matches(media)) continue;
+                if (rule.Container is { } container && !ContainerMatches(element, container)) continue;
                 if (HighestMatchingSpecificity(rule, element, focused) is { } specificity)
                 {
                     matched.Add((specificity, sheetIndex, rule.Order, rule));
@@ -90,6 +91,21 @@ public static class StyleResolver
         }
         matched.Sort((a, b) => (a.Specificity, a.Sheet, a.Order).CompareTo((b.Specificity, b.Sheet, b.Order)));
         return matched.Select(m => m.Rule);
+    }
+
+    /// <summary>
+    /// Whether the nearest ancestor container the query addresses satisfies
+    /// it. A container that has not been laid out yet matches nothing.
+    /// </summary>
+    private static bool ContainerMatches(HostElement element, ContainerQuery query)
+    {
+        for (var ancestor = element.Parent?.ClosestElement; ancestor is not null; ancestor = ancestor.Parent?.ClosestElement)
+        {
+            var style = ancestor.Node.Style;
+            if (style.ContainerType == ContainerType.Normal || !query.Addresses(style)) continue;
+            return ancestor.ContainerEnvironment is { } environment && query.Condition.Matches(environment);
+        }
+        return false;
     }
 
     private static int? HighestMatchingSpecificity(StyleRule rule, HostElement element, HostElement? focused)

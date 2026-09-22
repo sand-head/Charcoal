@@ -260,4 +260,19 @@ public class StyleParserTests
         Assert.Null(StyleParser.Substitute("var(--missing)", _ => null));
         Assert.Equal("rgb(1, 2, 3) solid", StyleParser.Substitute("var(--c, rgb(1, 2, 3)) var(--s)", k => k == "--s" ? "solid" : null));
     }
+
+    [Fact]
+    public void Container_properties_read_the_type_the_names_and_the_shorthand()
+    {
+        Assert.Equal(ContainerType.InlineSize, Apply("container-type", "inline-size").ContainerType);
+        Assert.Equal(ContainerType.Size, Apply("container-type", "size").ContainerType);
+        Assert.Equal(["a", "b"], Apply("container-name", "a b").ContainerNames);
+        Assert.Empty(Apply("container-name", "none").ContainerNames);
+        var shorthand = Apply("container", "card / inline-size");
+        Assert.Equal((ContainerType.InlineSize, "card"), (shorthand.ContainerType, shorthand.ContainerNames[0]));
+        Assert.Equal(ContainerType.Normal, Apply("container", "card").ContainerType);
+        Assert.Throws<FormatException>(() => Apply("container-type", "block-size"));
+        Assert.True(new Style { ContainerType = ContainerType.InlineSize }.Contains(true));
+        Assert.False(new Style { ContainerType = ContainerType.InlineSize }.Contains(false));
+    }
 }

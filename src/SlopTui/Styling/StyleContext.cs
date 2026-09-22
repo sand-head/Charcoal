@@ -63,6 +63,9 @@ public sealed class StyleContext
     /// <summary>Whether any sheet uses <c>@media</c>, so a change to <see cref="Media"/> restyles.</summary>
     public bool UsesMedia => Sheets.Any(s => s.UsesMedia);
 
+    /// <summary>Whether any sheet uses <c>@container</c>, so containers are measured after each layout.</summary>
+    public bool UsesContainer => Sheets.Any(s => s.UsesContainer);
+
     public bool DependsOnFocus => Flags().Depends;
 
     /// <summary>Whether focus can restyle elements below the focused one and its ancestors.</summary>

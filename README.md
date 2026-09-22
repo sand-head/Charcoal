@@ -66,10 +66,15 @@ return new TuiApp().Run<App>();
   `(60 <= width < 120)`; `orientation`; `aspect-ratio`;
   `prefers-color-scheme`, from the terminal's own background colour;
   `color`, from `COLORTERM`; `pointer`, from the mouse setting;
-  `prefers-reduced-motion`, set by the app; and `not`, `and`, `or`, nesting
-  and media types. A resize or a new colour scheme restyles what changed.
-  `@supports` is answered from the property parser. An unknown feature or a
-  pixel length makes a query false rather than failing the sheet.
+  `prefers-reduced-motion`, set by the app; `resolution` in `dppx`, once the
+  terminal reports its cell size; and `not`, `and`, `or`, nesting and media
+  types. A resize or a new colour scheme restyles what changed. `@supports`
+  is answered from the property parser. An unknown feature or a pixel
+  length makes a query false rather than failing the sheet.
+- **Container queries.** `container-type: inline-size | size` and
+  `container-name` make an element a query container. `@container [name]
+  (max-width: 30) { … }` styles its descendants by its content box, with
+  `inline-size` and `block-size` as well as `width` and `height`.
 - **Component-scoped stylesheets.** A `Component.razor.css` beside a
   component is scoped to it exactly as Blazor does on the web, `::deep`
   included. The build embeds the bundle in the assembly and `TuiApp` loads
@@ -78,10 +83,11 @@ return new TuiApp().Run<App>();
 - **Pictures.** `<img src="logo.png" width="24" />` decodes PNG, JPEG, GIF,
   BMP, TGA and PSD without a native library. Terminals with the kitty
   graphics protocol (kitty, WezTerm, Ghostty, Konsole) show it at full
-  resolution, and it still clips and scrolls like text; elsewhere it is
-  drawn as half blocks in truecolour. Given one side, the other follows the
-  image's shape; given neither, it shrinks to fit. `alt` shows when the
-  source does not decode.
+  resolution, and it still clips and scrolls like text. Sixel terminals
+  (xterm, foot, mlterm, Contour) get it as Sixel, cropped to the visible
+  cells. Elsewhere it is drawn as half blocks in truecolour. Given one side,
+  the other follows the image's shape; given neither, it shrinks to fit.
+  `alt` shows when the source does not decode.
 - **Blazor.** Parameters, `@key`, `@ref`, `EventCallback`, cascading values,
   `@inject`, `StateHasChanged` and `InvokeAsync` work as they do on the web.
 - **Flexbox and grid on cells.** Direction, wrap, justify, align (items,
@@ -173,9 +179,9 @@ the web. See [docs/design.md](docs/design.md) for details.
 
 ## Not yet supported
 
-Sixel and iTerm2 inline images; `!important`; `@container`; pseudo-elements;
-`margin: auto` centring; horizontal scrolling in `ScrollBox`; list markers;
-and clicks on inline elements, which go to the block that holds them.
+iTerm2 inline images; `!important`; pseudo-elements; `margin: auto`
+centring; horizontal scrolling in `ScrollBox`; list markers; and clicks on
+inline elements, which go to the block that holds them.
 
 ## Building
 

@@ -145,8 +145,20 @@ their foreground colour. The terminal draws the picture over exactly those
 cells, so clipping, scrolling and overlap need nothing beyond the cell diff.
 A transmission goes out in the same write as the frame that first uses it,
 and every image is deleted on exit. Ids carry a per-process high byte so two
-apps in one terminal do not replace each other's pictures. Sixel and iTerm2
-images are not supported, since neither is tied to cells.
+apps in one terminal do not replace each other's pictures.
+
+**Sixel.** A terminal that lists attribute 4 in its DA1 reply and lacks the
+kitty protocol gets Sixel pictures. `Sixel.Encode` scales the image to the
+placement's pixels, quantises it to a 252-colour palette, and leaves
+transparent pixels undrawn. The terminal paints a Sixel picture at the
+cursor and forgets it, so pictures are tracked as a placement list rather
+than as cells. The painter blanks the cells a picture covers and records the
+placement with its visible part. After the diff, `Graphics.SixelOutput`
+sends every placement that is new, has moved, or stands on a repainted row,
+cropped to its visible cells because the terminal cannot clip it. Mode 8452
+keeps a picture on the last row from scrolling the screen, and mode 1070
+gives each picture its own colour registers. Encodings are cached per
+placement. iTerm2 inline images are not supported.
 
 **`canvas`** is a leaf painted by a delegate on the element (`Painter`). The
 `Canvas` component captures its element with `@ref` and sets the delegate
@@ -238,6 +250,19 @@ does not match, so a page's `768px` breakpoints load but never fire.
 `(display: grid)` holds and `(gap: 1px)` does not, and from
 `Selector.Parse` for `selector(…)`. A block that does not hold is dropped
 with a warning.
+
+**Container queries.** `container-type`, with `container-name` and the
+`container` shorthand, makes an element a query container with size
+containment on the contained axis: its size there does not depend on its
+content, so the queries cannot change the size they read. An `@container`
+block attaches a `ContainerQuery` to its rules, evaluated against the nearest
+ancestor container with a matching name. The container's
+`ContainerEnvironment` is the app's media environment with the content box
+as width and height. Before the first layout a container has no box and its
+rules do not apply. After each layout the app restyles the descendants of
+every container whose box changed and lays out again, at most three times.
+Nested `@container` blocks are rejected; inside `@media` the conditions
+combine.
 
 **Scoped stylesheets** are Blazor's own. For a `Component.razor.css` beside a
 component, the Razor SDK stamps a `b-…` attribute on that component's

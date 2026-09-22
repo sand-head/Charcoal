@@ -26,6 +26,14 @@ public sealed record MediaEnvironment
 
     public bool ReducedMotion { get; init; }
 
+    /// <summary>
+    /// The cell's size in device pixels, as the terminal reports it, or 0
+    /// until it does. A cell is the CSS pixel here, so <c>resolution</c> in
+    /// <c>dppx</c> is the cell width.
+    /// </summary>
+    public int CellPixelWidth { get; init; }
+    public int CellPixelHeight { get; init; }
+
     public static readonly MediaEnvironment Default = new();
 
     /// <summary>Wider than tall; a square viewport is portrait, as in CSS.</summary>
@@ -50,8 +58,11 @@ public enum MediaResult { False, True, Unknown }
 /// <c>hover</c> and <c>any-hover</c> (none), <c>pointer</c> and
 /// <c>any-pointer</c> (fine with the mouse on), <c>prefers-reduced-motion</c>,
 /// <c>prefers-contrast</c> (no-preference), <c>forced-colors</c> (none),
-/// <c>display-mode</c> (fullscreen), <c>scripting</c> (enabled) and
-/// <c>update</c> (fast).
+/// <c>display-mode</c> (fullscreen), <c>scripting</c> (enabled),
+/// <c>update</c> (fast) and <c>resolution</c> in <c>dppx</c> or <c>x</c>,
+/// which is unknown until the terminal reports its cell size. Inside
+/// <c>@container</c> the same grammar runs against the container's content
+/// box, where <c>inline-size</c> and <c>block-size</c> name its width and height.
 /// </remarks>
 public sealed class MediaQueryList
 {
@@ -373,12 +384,16 @@ public sealed class MediaQueryList
         private FormatException Error(string problem) => new($"'{source}': {problem}.");
     }
 
-    private static readonly HashSet<string> Numeric = new(StringComparer.Ordinal) { "width", "height", "aspect-ratio", "color", "monochrome", "grid" };
+    private static readonly HashSet<string> Numeric = new(StringComparer.Ordinal)
+    {
+        "width", "height", "inline-size", "block-size", "aspect-ratio", "color", "monochrome", "grid", "resolution",
+    };
 
     /// <summary><c>(feature)</c>: true when the feature's value is not zero or none.</summary>
     private static Node Boolean(string feature) => feature switch
     {
-        "width" or "height" or "aspect-ratio" or "color" or "grid" => True,
+        "width" or "height" or "inline-size" or "block-size" or "aspect-ratio" or "color" or "grid" => True,
+        "resolution" => new FeatureNode(env => env.CellPixelWidth > 0 ? MediaResult.True : MediaResult.Unknown),
         "monochrome" or "hover" or "any-hover" => False,
         "pointer" or "any-pointer" => new FeatureNode(env => Truth(env.Pointer)),
         "orientation" or "prefers-color-scheme" or "display-mode" or "scripting" or "update" => True,
@@ -451,11 +466,17 @@ public sealed class MediaQueryList
             return new FeatureNode(env => Truth(Holds(op, env.Width * denominator, numerator * env.Height)));
         }
 
+        if (feature == "resolution")
+        {
+            if (!TryResolution(value, out var dppx)) return Unknown;
+            return new FeatureNode(env => env.CellPixelWidth > 0 ? Truth(Holds(op, env.CellPixelWidth, dppx)) : MediaResult.Unknown);
+        }
+
         if (!TryCells(value, out var cells)) return Unknown;
         return feature switch
         {
-            "width" => new FeatureNode(env => Truth(Holds(op, env.Width, cells))),
-            "height" => new FeatureNode(env => Truth(Holds(op, env.Height, cells))),
+            "width" or "inline-size" => new FeatureNode(env => Truth(Holds(op, env.Width, cells))),
+            "height" or "block-size" => new FeatureNode(env => Truth(Holds(op, env.Height, cells))),
             "color" => new FeatureNode(env => Truth(Holds(op, env.ColorBits, cells))),
             "monochrome" => Const(Holds(op, 0, cells)),
             "grid" => Const(Holds(op, 1, cells)),
@@ -482,6 +503,30 @@ public sealed class MediaQueryList
         return double.TryParse(number, NumberStyles.Float, CultureInfo.InvariantCulture, out cells);
     }
 
+    /// <summary>
+    /// Reads <c>Ndppx</c> or <c>Nx</c>, device pixels per cell. <c>dpi</c> and
+    /// <c>dpcm</c> are not supported, since a terminal has no physical size.
+    /// </summary>
+    private static bool TryResolution(string text, out double dppx)
+    {
+        dppx = 0;
+        var lower = text.ToLowerInvariant();
+        string number;
+        if (lower.EndsWith("dppx", StringComparison.Ordinal))
+        {
+            number = lower[..^"dppx".Length];
+        }
+        else if (lower.EndsWith('x') && !lower.EndsWith("px", StringComparison.Ordinal))
+        {
+            number = lower[..^1];
+        }
+        else
+        {
+            return false;
+        }
+        return double.TryParse(number, NumberStyles.Float, CultureInfo.InvariantCulture, out dppx);
+    }
+
     private static bool TryRatio(string text, out double numerator, out double denominator)
     {
         numerator = 0;
@@ -497,6 +542,50 @@ public sealed class MediaQueryList
     private static MediaResult Truth(bool value) => value ? MediaResult.True : MediaResult.False;
 
     private static Node Const(bool value) => value ? True : False;
+}
+
+/// <summary>
+/// An <c>@container</c> prelude: an optional container name and a condition,
+/// evaluated against the content box of the nearest ancestor with a
+/// <c>container-type</c> (and that name, when one is given).
+/// </summary>
+public sealed class ContainerQuery
+{
+    private ContainerQuery(string? name, MediaQueryList condition, string text)
+    {
+        Name = name;
+        Condition = condition;
+        Text = text;
+    }
+
+    /// <summary>The container name asked for, or null for the nearest container.</summary>
+    public string? Name { get; }
+
+    public MediaQueryList Condition { get; }
+
+    public string Text { get; }
+
+    /// <summary>Parses <c>[name] condition</c>.</summary>
+    /// <exception cref="FormatException">The prelude is malformed.</exception>
+    public static ContainerQuery Parse(string text)
+    {
+        var trimmed = text.Trim();
+        if (trimmed.Length == 0) throw new FormatException("'@container' has no condition.");
+
+        var startsWithCondition = trimmed.StartsWith('(') || trimmed.StartsWith("not", StringComparison.OrdinalIgnoreCase);
+        if (startsWithCondition) return new ContainerQuery(null, MediaQueryList.Parse(trimmed), trimmed);
+
+        var nameEnd = trimmed.IndexOfAny([' ', '\t', '(']);
+        if (nameEnd < 0) throw new FormatException($"'@container {trimmed}': a name needs a condition after it.");
+        var condition = MediaQueryList.Parse(trimmed[nameEnd..].Trim());
+        return new ContainerQuery(trimmed[..nameEnd], condition, trimmed);
+    }
+
+    /// <summary>Whether the container has the name this query asks for, if any.</summary>
+    public bool Addresses(Layout.Style container) =>
+        Name is null || container.ContainerNames.Contains(Name, StringComparer.Ordinal);
+
+    public override string ToString() => Text;
 }
 
 /// <summary>

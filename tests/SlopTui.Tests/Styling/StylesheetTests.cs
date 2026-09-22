@@ -199,4 +199,22 @@ public class StylesheetTests
         Assert.Contains("line 2", ex.Message);
         Assert.Throws<FormatException>(() => Stylesheet.Parse("@media (min-width: 80) { div { padding: 1 }"));
     }
+
+    [Fact]
+    public void Container_blocks_attach_their_query_and_sit_under_a_media_block()
+    {
+        var sheet = Stylesheet.Parse("""
+            .panel { container-type: inline-size; container-name: panel }
+            @container panel (max-width: 30) { .label { display: none } }
+            @media (min-height: 10) { @container (min-width: 60) { .wide { display: block } } }
+            """);
+        Assert.Equal(3, sheet.Rules.Count);
+        Assert.Null(sheet.Rules[0].Container);
+        Assert.Equal("panel", sheet.Rules[1].Container!.Name);
+        Assert.Equal("panel (max-width: 30)", sheet.Rules[1].Container!.Text);
+        Assert.Null(sheet.Rules[2].Container!.Name);
+        Assert.Equal("(min-height: 10)", sheet.Rules[2].Media!.Text);
+        Assert.True(sheet.UsesContainer);
+        Assert.Throws<FormatException>(() => Stylesheet.Parse("@container (min-width: 1) { @container (min-width: 2) { p { } } }"));
+    }
 }

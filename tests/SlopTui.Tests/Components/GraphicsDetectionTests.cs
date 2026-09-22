@@ -116,4 +116,62 @@ public class GraphicsDetectionTests
         var done = parser.Feed("K\e\\", 0);
         Assert.Equal("\e_Gi=31;OK\e\\", Assert.IsType<ReplyEvent>(Assert.Single(done.Events)).Sequence);
     }
+
+    [Fact]
+    public async Task A_sixel_terminal_gets_the_picture_after_the_diff_and_again_only_where_the_diff_touched_it()
+    {
+        var terminal = new HeadlessTerminal(20, 5);
+        var app = new TuiApp(terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
+        var run = Task.Run(() => app.Run<Host>());
+        WaitUntil(() => terminal.Writes.Count >= 1, "the first frame", run);
+
+        var before = terminal.Writes.Count;
+        terminal.Inject("\e[?62;4;22c");
+        WaitUntil(() => terminal.Writes.Count > before, "the repaint after DA1", run);
+        Assert.True(app.Graphics.Sixel);
+        Assert.True(app.Graphics.UsesSixel);
+        var frame = string.Concat(terminal.Writes.Skip(before));
+        Assert.Contains(Graphics.SixelModesOn, frame);
+        // The picture: cursor saved, moved to the img's cell, the DCS for 4×2 cells at the default 8×16 pixels, cursor restored.
+        Assert.Contains("\e7\e[1;1H\eP0;1;0q\"1;1;32;32", frame);
+        Assert.Contains("\e8", frame);
+        Assert.DoesNotContain("▀", frame);
+        Assert.DoesNotContain(KittyGraphics.Placeholder, frame);
+
+        // Nothing changed: nothing is sent again.
+        var again = terminal.Writes.Count;
+        app.Invalidate();
+        Thread.Sleep(80);
+        Assert.DoesNotContain("\eP", string.Concat(terminal.Writes.Skip(again)));
+
+        // A resize repaints the screen, so the picture goes again.
+        var resized = terminal.Writes.Count;
+        terminal.Resize(30, 6);
+        WaitUntil(() => terminal.Writes.Count > resized, "the frame after the resize", run);
+        Assert.Contains("\eP0;1;0q", string.Concat(terminal.Writes.Skip(resized)));
+
+        app.Exit();
+        await run;
+        Assert.EndsWith(Graphics.SixelModesOff, terminal.Output.Substring(0, terminal.Output.LastIndexOf(Graphics.SixelModesOff, StringComparison.Ordinal) + Graphics.SixelModesOff.Length));
+    }
+
+    [Fact]
+    public async Task Kitty_wins_over_sixel_when_a_terminal_has_both()
+    {
+        var terminal = new HeadlessTerminal(20, 5);
+        var app = new TuiApp(terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
+        var run = Task.Run(() => app.Run<Host>());
+        WaitUntil(() => terminal.Writes.Count >= 1, "the first frame", run);
+        var before = terminal.Writes.Count;
+        terminal.Inject("\e_Gi=31;OK\e\\" + "\e[?62;4;22c");
+        WaitUntil(() => app.Graphics.Detected && terminal.Writes.Count > before, "detection", run);
+        Thread.Sleep(50);
+        Assert.True(app.Graphics.Sixel);
+        Assert.False(app.Graphics.UsesSixel);
+        var frame = string.Concat(terminal.Writes.Skip(before));
+        Assert.True(frame.Contains(KittyGraphics.Placeholder), "writes after detection: " + string.Join(" || ", terminal.Writes.Skip(before).Select(w => w.Replace("\e", "ESC"))));
+        Assert.DoesNotContain("\eP0;1;0q", frame);
+        app.Exit();
+        await run;
+    }
 }

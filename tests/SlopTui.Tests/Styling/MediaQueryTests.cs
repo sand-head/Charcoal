@@ -131,4 +131,35 @@ public class MediaQueryTests
     [InlineData("selector(div > p)", true)]
     public void Supports_answers_from_the_parser(string condition, bool expected) =>
         Assert.Equal(expected, SupportsCondition.Evaluate(condition));
+
+    [Fact]
+    public void Resolution_is_the_cells_pixel_width_and_unknown_until_the_terminal_says()
+    {
+        var known = new MediaEnvironment { CellPixelWidth = 10, CellPixelHeight = 20 };
+        Assert.True(Matches("(resolution)", known));
+        Assert.True(Matches("(min-resolution: 8dppx)", known));
+        Assert.True(Matches("(resolution >= 10x)", known));
+        Assert.False(Matches("(resolution > 10dppx)", known));
+        Assert.Equal(MediaResult.Unknown, MediaQueryList.Parse("(min-resolution: 96dpi)").Evaluate(known));
+        Assert.Equal(MediaResult.Unknown, MediaQueryList.Parse("(resolution)").Evaluate(Wide));
+        Assert.False(Matches("(min-resolution: 1dppx)", Wide));
+    }
+
+    [Fact]
+    public void Container_queries_take_a_name_and_the_container_box_feature_names()
+    {
+        var query = ContainerQuery.Parse("side (min-inline-size: 30) and (block-size > 4)");
+        Assert.Equal("side", query.Name);
+        Assert.True(query.Condition.Matches(new MediaEnvironment { Width = 30, Height = 5 }));
+        Assert.False(query.Condition.Matches(new MediaEnvironment { Width = 29, Height = 5 }));
+        Assert.True(query.Addresses(new SlopTui.Layout.Style { ContainerNames = ["main", "side"] }));
+        Assert.False(query.Addresses(new SlopTui.Layout.Style { ContainerNames = ["main"] }));
+
+        var anonymous = ContainerQuery.Parse("(width < 40)");
+        Assert.Null(anonymous.Name);
+        Assert.True(anonymous.Addresses(new SlopTui.Layout.Style()));
+        Assert.True(ContainerQuery.Parse("not (width < 40)").Condition.Matches(new MediaEnvironment { Width = 40 }));
+        Assert.Throws<FormatException>(() => ContainerQuery.Parse("side"));
+        Assert.Throws<FormatException>(() => ContainerQuery.Parse(""));
+    }
 }
