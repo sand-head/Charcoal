@@ -3,3 +3,9 @@
 .you { color: cyan }
 .agent { color: green }
 .text { flex: 1 }
+
+/* Without room for the speaker column, the text's colour shows who spoke. */
+@media (max-width: 60) {
+    .who { display: none }
+    .entry.you .text { color: cyan }
+}

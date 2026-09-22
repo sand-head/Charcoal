@@ -303,7 +303,7 @@ public sealed class HostElement : HostNode
     private Style ResolveStyle(Style previous)
     {
         var sheets = _styles?.Sheets ?? (IReadOnlyList<Stylesheet>)[];
-        var style = StyleResolver.Resolve(this, sheets, _styles?.Focused);
+        var style = StyleResolver.Resolve(this, sheets, _styles?.Focused, _styles?.Media);
         if (IsImage) style = WithImageSize(style);
 
         // Keeping the old map when the content is the same lets the style

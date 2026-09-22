@@ -57,5 +57,8 @@ public static class Ansi
     /// <summary>XTWINOPS 16, the cell size in pixels. The reply is <c>CSI 6 ; height ; width t</c>.</summary>
     public const string QueryCellPixels = "\e[16t";
 
+    /// <summary>OSC 11, the default background colour. The reply is <c>OSC 11 ; rgb:rrrr/gggg/bbbb ST</c>.</summary>
+    public const string QueryBackground = "\e]11;?\e\\";
+
     public const string EraseToEndOfLine = "\e[K";
 }

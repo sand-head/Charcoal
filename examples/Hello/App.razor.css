@@ -3,3 +3,10 @@
 .banner { width: fit-content; border: solid cyan; border-radius: 1; padding: 0 1; color: green; font-weight: bold }
 .muted { opacity: 0.5 }
 .picture { color: cyan; margin-top: 1 }
+
+/* Cyan and green are hard to read on a light background. */
+@media (prefers-color-scheme: light) {
+    .banner { border-color: blue; color: darkgreen }
+    .picture { color: navy }
+}
+@media (max-height: 12) { .picture { display: none } }

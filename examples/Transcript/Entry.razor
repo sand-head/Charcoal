@@ -1,5 +1,5 @@
 @* One transcript line, re-rendered only when its text changes. *@
-<div class="entry">
+<div class="@(IsUser ? "entry you" : "entry")">
     <div class="@(IsUser ? "who you" : "who agent")">@(IsUser ? "you  " : "agent")</div>
     <div class="text">@Line.Text</div>
 </div>

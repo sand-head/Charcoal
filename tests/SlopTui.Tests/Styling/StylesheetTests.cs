@@ -104,7 +104,7 @@ public class StylesheetTests
     }
 
     [Fact]
-    public void At_rules_are_skipped_whole_and_custom_properties_are_declarations()
+    public void Unknown_at_rules_are_skipped_whole_and_custom_properties_are_declarations()
     {
         var sheet = Stylesheet.Parse("""
             @import url("shared.css");
@@ -112,11 +112,13 @@ public class StylesheetTests
             :root { --accent: cyan }
             div { color: var(--accent); padding: 1 !important }
             """);
-        Assert.Equal(2, sheet.Rules.Count);
-        Assert.Equal(2, sheet.Warnings.Count);
-        Assert.True(sheet.Rules[0].Declarations[0].IsCustom);
-        Assert.Equal("var(--accent)", sheet.Rules[1].Declarations[0].Value);
-        Assert.Equal("1", sheet.Rules[1].Declarations[1].Value);
+        Assert.Equal(4, sheet.Rules.Count);   // the @media block is parsed, the @import skipped
+        Assert.Single(sheet.Warnings);
+        Assert.NotNull(sheet.Rules[0].Media);
+        Assert.True(sheet.Rules[1].Declarations[0].IsCustom);
+        Assert.True(sheet.Rules[2].Declarations[0].IsCustom);
+        Assert.Equal("var(--accent)", sheet.Rules[3].Declarations[0].Value);
+        Assert.Equal("1", sheet.Rules[3].Declarations[1].Value);
     }
 
     [Theory]
@@ -150,5 +152,51 @@ public class StylesheetTests
     public void An_empty_sheet_has_no_rules()
     {
         Assert.Empty(Stylesheet.Parse("  \n/* nothing */\n").Rules);
+    }
+
+    [Fact]
+    public void Media_blocks_attach_their_query_to_the_rules_inside_and_nest_with_and()
+    {
+        var sheet = Stylesheet.Parse("""
+            div { padding: 1 }
+            @media (max-width: 60) {
+                div { padding: 0 }
+                @media (orientation: portrait) { .side { display: none } }
+            }
+            @media screen and (min-width: 120), print { .wide { display: block } }
+            p { margin: 0 }
+            """);
+        Assert.Equal(5, sheet.Rules.Count);
+        Assert.Null(sheet.Rules[0].Media);
+        Assert.Equal("(max-width: 60)", sheet.Rules[1].Media!.Text);
+        Assert.Equal("(max-width: 60) and (orientation: portrait)", sheet.Rules[2].Media!.Text);
+        Assert.Equal("screen and (min-width: 120), print", sheet.Rules[3].Media!.Text);
+        Assert.Null(sheet.Rules[4].Media);
+        Assert.Equal([0, 1, 2, 3, 4], sheet.Rules.Select(r => r.Order));
+        Assert.True(sheet.UsesMedia);
+        Assert.Empty(sheet.Warnings);
+        Assert.False(Stylesheet.Parse("div { padding: 1 }").UsesMedia);
+    }
+
+    [Fact]
+    public void Supports_blocks_are_kept_or_dropped_at_parse_time()
+    {
+        var sheet = Stylesheet.Parse("""
+            @supports (display: grid) { .a { display: grid } }
+            @supports (display: grid) and (gap: 1px) { .b { padding: 9 } }
+            @supports not (display: grid) { .c { padding: 9 } }
+            @media (min-width: 1) { @supports (color: red) { .d { color: red } } }
+            """);
+        Assert.Equal(["a", "d"], sheet.Rules.Select(r => r.Selectors[0].Compounds[0].Classes[0]));
+        Assert.Equal("(min-width: 1)", sheet.Rules[1].Media!.Text);
+        Assert.Equal(2, sheet.Warnings.Count);
+    }
+
+    [Fact]
+    public void A_bad_media_query_names_its_line()
+    {
+        var ex = Assert.Throws<FormatException>(() => Stylesheet.Parse("div { }\n@media (min-width 80) { div { } }"));
+        Assert.Contains("line 2", ex.Message);
+        Assert.Throws<FormatException>(() => Stylesheet.Parse("@media (min-width: 80) { div { padding: 1 }"));
     }
 }

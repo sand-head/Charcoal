@@ -44,7 +44,7 @@ public class GraphicsDetectionTests
         WaitUntil(() => terminal.Writes.Count >= 1, "the first frame", run);
 
         // The queries lead the first frame, in the same write.
-        Assert.StartsWith(KittyGraphics.Query + Ansi.QueryCellPixels + Ansi.QueryDeviceAttributes, terminal.Writes[0]);
+        Assert.StartsWith(Ansi.QueryBackground + KittyGraphics.Query + Ansi.QueryCellPixels + Ansi.QueryDeviceAttributes, terminal.Writes[0]);
         Assert.False(app.Graphics.Detected);
         // Before any answer: half blocks.
         Assert.Contains("▀", terminal.Writes[0]);

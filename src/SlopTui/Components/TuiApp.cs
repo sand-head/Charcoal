@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Reflection;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
@@ -77,6 +78,43 @@ public sealed class TuiApp
 
     /// <summary>Parses CSS and adds it as the last stylesheet.</summary>
     public Stylesheet AddStylesheet(string css) => _styles.Sheets.Add(css);
+
+    /// <summary>
+    /// What <c>@media</c> queries see: the terminal's size, colour scheme and
+    /// colour depth, whether the mouse is on, and a reduced-motion preference
+    /// the app may set. Changing it restyles when a sheet uses <c>@media</c>.
+    /// </summary>
+    public MediaEnvironment Media
+    {
+        get => _styles.Media;
+        set => SetMedia(value);
+    }
+
+    /// <summary>
+    /// Whether to ask the terminal for its background colour at start and set
+    /// <c>prefers-color-scheme</c> from its lightness. Until it answers, the
+    /// scheme is dark.
+    /// </summary>
+    public bool DetectColorScheme { get; set; } = true;
+
+    private void SetMedia(MediaEnvironment media)
+    {
+        if (ReferenceEquals(_styles.Media, media) || _styles.Media == media) return;
+        _styles.Media = media;
+        if (_styles.UsesMedia) RestyleAll();
+    }
+
+    /// <summary>Bits per colour component, from the environment of a real console.</summary>
+    private int ColorBits()
+    {
+        if (_terminal is not ConsoleTerminal) return _styles.Media.ColorBits;
+        var colorTerm = Environment.GetEnvironmentVariable("COLORTERM") ?? "";
+        var trueColor = colorTerm.Contains("truecolor", StringComparison.OrdinalIgnoreCase)
+            || colorTerm.Contains("24bit", StringComparison.OrdinalIgnoreCase);
+        if (trueColor) return 8;
+        var term = Environment.GetEnvironmentVariable("TERM") ?? "";
+        return term.Contains("256", StringComparison.Ordinal) ? 4 : 2;
+    }
 
     /// <summary>
     /// Whether to load, before the first frame, the component-scoped
@@ -239,6 +277,14 @@ public sealed class TuiApp
             {
                 Graphics.Detected = true;
             }
+            if (DetectColorScheme && _terminal.IsInteractive) _startup = Ansi.QueryBackground + _startup;
+            _styles.Media = _styles.Media with
+            {
+                Width = _size.Width,
+                Height = _size.Height,
+                ColorBits = ColorBits(),
+                Pointer = _options.Terminal.Mouse,
+            };
             _renderer.SetViewport(_size);
             var parameterView = parameters is null
                 ? ParameterView.Empty
@@ -263,7 +309,9 @@ public sealed class TuiApp
         return _exitCode;
     }
 
-    private void OnStylesheetsChanged()
+    private void OnStylesheetsChanged() => RestyleAll();
+
+    private void RestyleAll()
     {
         if (_renderer is null) return;
         if (_dispatcher.CheckAccess())
@@ -307,6 +355,7 @@ public sealed class TuiApp
             if (_resized)
             {
                 _resized = false;
+                SetMedia(_styles.Media with { Width = _size.Width, Height = _size.Height });
                 _renderer!.SetViewport(_size);
                 _screen!.Resize(_size.Width, _size.Height);
                 _renderer.Dirty = true;
@@ -458,6 +507,12 @@ public sealed class TuiApp
         {
             Graphics.Detected = true;
         }
+        else if (sequence.StartsWith("\e]11;", StringComparison.Ordinal) && TryParseOscColor(sequence[5..], out var background))
+        {
+            var (r, g, b) = background;
+            var luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            SetMedia(_styles.Media with { ColorScheme = luminance < 0.5 ? ColorScheme.Dark : ColorScheme.Light });
+        }
         return Task.CompletedTask;
     }
 
@@ -473,6 +528,45 @@ public sealed class TuiApp
         if (width <= 0 || height <= 0) return false;
 
         size = new Size(width, height);
+        return true;
+    }
+
+    /// <summary>
+    /// Reads an OSC colour answer, <c>rgb:rrrr/gggg/bbbb</c> with one to four
+    /// hex digits a channel or <c>#rrggbb</c>, as fractions of full intensity.
+    /// </summary>
+    internal static bool TryParseOscColor(string text, out (double R, double G, double B) color)
+    {
+        color = default;
+        var value = text.TrimEnd('\a', '\e', '\\');
+        if (value.StartsWith("rgb:", StringComparison.OrdinalIgnoreCase))
+        {
+            var channels = value[4..].Split('/');
+            if (channels.Length != 3) return false;
+            if (!TryParseHexChannel(channels[0], out var r) || !TryParseHexChannel(channels[1], out var g) || !TryParseHexChannel(channels[2], out var b))
+            {
+                return false;
+            }
+            color = (r, g, b);
+            return true;
+        }
+        if (value.StartsWith('#') && Color.TryParse(value, out var parsed) && parsed.Kind == ColorKind.Rgb)
+        {
+            color = (parsed.R / 255.0, parsed.G / 255.0, parsed.B / 255.0);
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>A channel of one to four hex digits, as a fraction of its maximum.</summary>
+    private static bool TryParseHexChannel(string digits, out double fraction)
+    {
+        fraction = 0;
+        if (digits.Length is < 1 or > 4) return false;
+        if (!int.TryParse(digits, NumberStyles.HexNumber, null, out var value)) return false;
+
+        var maximum = (1 << (4 * digits.Length)) - 1;
+        fraction = value / (double)maximum;
         return true;
     }
 

@@ -303,4 +303,20 @@ public class StyleResolverTests
         caret.SetAttribute("caret", "3,1", 0);
         Assert.Equal((3, 1), caret.Caret);
     }
+
+    [Fact]
+    public void A_media_rule_applies_only_while_the_environment_matches()
+    {
+        _ctx.Sheets.Add("div { padding: 2 } @media (max-width: 60) { div { padding: 0 } } @media (prefers-color-scheme: light) { div { color: black } }");
+        _ctx.Media = new MediaEnvironment { Width = 100, Height = 30 };
+        var div = Element("div");
+        Assert.Equal(new Edges(2), div.Node.Style.Padding);
+        Assert.Equal(Color.Default, div.Node.Style.Color);
+
+        _ctx.Media = new MediaEnvironment { Width = 50, Height = 30, ColorScheme = ColorScheme.Light };
+        div.Restyle();
+        Assert.Equal(Edges.Zero, div.Node.Style.Padding);
+        Assert.Equal(Color.Black, div.Node.Style.Color);
+        Assert.True(_ctx.UsesMedia);
+    }
 }

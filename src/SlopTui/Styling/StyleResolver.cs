@@ -16,10 +16,10 @@ namespace SlopTui.Styling;
 /// </remarks>
 public static class StyleResolver
 {
-    public static Style Resolve(HostElement element, IReadOnlyList<Stylesheet> sheets, HostElement? focused)
+    public static Style Resolve(HostElement element, IReadOnlyList<Stylesheet> sheets, HostElement? focused, MediaEnvironment? media = null)
     {
         var parent = element.Parent?.ClosestElement?.Node.Style;
-        var declarations = CascadedDeclarations(element, sheets, focused);
+        var declarations = CascadedDeclarations(element, sheets, focused, media ?? MediaEnvironment.Default);
         var custom = CustomProperties(declarations, parent?.CustomProperties ?? Style.NoCustomProperties);
 
         var style = Style.Default with { CustomProperties = custom };
@@ -38,10 +38,11 @@ public static class StyleResolver
         selector.Matches(element, focused);
 
     /// <summary>The declarations of every matching rule in cascade order, then the inline style's.</summary>
-    private static List<(string Name, string Value)> CascadedDeclarations(HostElement element, IReadOnlyList<Stylesheet> sheets, HostElement? focused)
+    private static List<(string Name, string Value)> CascadedDeclarations(
+        HostElement element, IReadOnlyList<Stylesheet> sheets, HostElement? focused, MediaEnvironment media)
     {
         var declarations = new List<(string Name, string Value)>();
-        foreach (var rule in MatchingRules(element, sheets, focused))
+        foreach (var rule in MatchingRules(element, sheets, focused, media))
         {
             foreach (var declaration in rule.Declarations)
             {
@@ -67,13 +68,14 @@ public static class StyleResolver
     }
 
     /// <summary>The rules that match, lowest precedence first, starting with the user-agent sheet's.</summary>
-    private static IEnumerable<StyleRule> MatchingRules(HostElement element, IReadOnlyList<Stylesheet> sheets, HostElement? focused)
+    private static IEnumerable<StyleRule> MatchingRules(HostElement element, IReadOnlyList<Stylesheet> sheets, HostElement? focused, MediaEnvironment media)
     {
         var matched = new List<(int Specificity, int Sheet, int Order, StyleRule Rule)>();
         void Collect(Stylesheet sheet, int sheetIndex)
         {
             foreach (var rule in sheet.Rules)
             {
+                if (rule.Media is { } query && !query.Matches(media)) continue;
                 if (HighestMatchingSpecificity(rule, element, focused) is { } specificity)
                 {
                     matched.Add((specificity, sheetIndex, rule.Order, rule));

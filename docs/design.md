@@ -213,10 +213,31 @@ the selector that matched.
 `Stylesheet.Parse` reads selector lists; compounds of a type (`div`, `*`),
 `.class`, `#id`, `[name]`, `[name=value]`, `:focus`, `:focus-within`,
 `:root`, `:first-child` and `:last-child`; the descendant and child
-combinators, which see through components; comments; and declarations.
-At-rules such as `@import`, `@media` and `@layer` are skipped with a warning
-in `Warnings`, as are unknown properties. A bad value throws a
-`FormatException` naming the line, selector and property.
+combinators, which see through components; comments; declarations; and
+`@media` and `@supports` blocks. Other at-rules such as `@import` and
+`@layer` are skipped with a warning in `Warnings`, as are unknown
+properties. A bad value throws a `FormatException` naming the line,
+selector and property.
+
+**Media queries.** Rules inside an `@media` block carry its
+`MediaQueryList`, combined with `and` when blocks nest, and the cascade
+skips rules whose list does not match the `StyleContext`'s
+`MediaEnvironment`. Each list remembers its answer for the last
+environment. The environment describes the terminal as a device: its width
+and height in cells, its colour scheme, its bits per colour component,
+whether the mouse is on, and a reduced-motion preference. `TuiApp` sets the
+size at start and on every resize, the colour bits from `COLORTERM` and
+`TERM` on a real console, and the colour scheme from the relative luminance
+of the terminal's background, asked for with OSC 11 alongside the graphics
+queries. A change to the environment re-resolves every element, but only
+when a sheet uses `@media`. The grammar is Media Queries Level 4 (types,
+`not`/`only`/`and`/`or`, ranges) with three-valued logic: an unknown
+feature, or a length in pixels, is unknown, and a query that ends unknown
+does not match, so a page's `768px` breakpoints load but never fire.
+`@supports` is answered at parse time from the property parser, so
+`(display: grid)` holds and `(gap: 1px)` does not, and from
+`Selector.Parse` for `selector(…)`. A block that does not hold is dropped
+with a warning.
 
 **Scoped stylesheets** are Blazor's own. For a `Component.razor.css` beside a
 component, the Razor SDK stamps a `b-…` attribute on that component's

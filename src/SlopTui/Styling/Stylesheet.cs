@@ -10,13 +10,14 @@ public sealed record Declaration(string Name, string Value, bool Known)
     public bool IsCustom => StyleParser.IsCustomProperty(Name);
 }
 
-/// <summary>A rule and its position in the sheet.</summary>
-public sealed record StyleRule(IReadOnlyList<Selector> Selectors, IReadOnlyList<Declaration> Declarations, int Order);
+/// <summary>A rule, its position in the sheet, and the <c>@media</c> condition it sits under.</summary>
+public sealed record StyleRule(IReadOnlyList<Selector> Selectors, IReadOnlyList<Declaration> Declarations, int Order, MediaQueryList? Media = null);
 
 /// <summary>
-/// A parsed stylesheet: selector lists, comments, custom properties and
-/// declarations. At-rules are skipped with a warning, and <c>!important</c>
-/// is accepted and ignored.
+/// A parsed stylesheet: selector lists, comments, custom properties,
+/// declarations, <c>@media</c> blocks (nested ones combine with <c>and</c>)
+/// and <c>@supports</c> blocks, which are decided at parse time. Other
+/// at-rules are skipped with a warning, and <c>!important</c> is ignored.
 /// </summary>
 /// <remarks>
 /// A bad value fails the parse with its line, selector and property. A CSS
@@ -45,46 +46,121 @@ public sealed class Stylesheet
     /// <summary>Whether a focus pseudo class appears left of a combinator, so focus can restyle descendants.</summary>
     public bool FocusAffectsDescendants => Rules.Any(r => r.Selectors.Any(s => s.FocusAffectsDescendants));
 
+    /// <summary>Whether any rule sits under <c>@media</c>, so a change to the environment restyles.</summary>
+    public bool UsesMedia => Rules.Any(r => r.Media is not null);
+
     /// <exception cref="FormatException">The CSS is malformed; the message names the line.</exception>
     public static Stylesheet Parse(string css)
     {
         ArgumentNullException.ThrowIfNull(css);
         var text = StripComments(css);
-        var rules = new List<StyleRule>();
-        var warnings = new List<string>();
-        var position = 0;
-        while (true)
-        {
-            while (position < text.Length && char.IsWhiteSpace(text[position])) position++;
-            if (position >= text.Length) break;
-
-            if (text[position] == '@')
-            {
-                position = SkipAtRule(text, position, warnings);
-                continue;
-            }
-            rules.Add(ParseRule(text, ref position, rules.Count, warnings));
-        }
-        return new Stylesheet(rules, warnings, css);
+        var reader = new SheetReader(text);
+        reader.ReadRules(0, text.Length, media: null);
+        return new Stylesheet(reader.Rules, reader.Warnings, css);
     }
 
-    private static StyleRule ParseRule(string text, ref int position, int order, List<string> warnings)
+    private sealed class SheetReader(string text)
     {
-        var start = position;
-        var line = LineOf(text, start);
-        var open = text.IndexOf('{', start);
-        if (open < 0) throw new FormatException($"line {line}: expected '{{' after '{text[start..].Trim()}'.");
+        public List<StyleRule> Rules { get; } = [];
+        public List<string> Warnings { get; } = [];
 
-        var selectorText = text[start..open].Trim();
-        var close = text.IndexOf('}', open);
-        if (close < 0) throw new FormatException($"line {LineOf(text, open)}: '{selectorText}' has no closing '}}'.");
-        if (selectorText.Contains('}')) throw new FormatException($"line {line}: a rule body was not opened before '{selectorText}'.");
+        /// <summary>Reads the rules up to <paramref name="end"/>, each under <paramref name="media"/>.</summary>
+        public void ReadRules(int position, int end, MediaQueryList? media)
+        {
+            while (true)
+            {
+                while (position < end && char.IsWhiteSpace(text[position])) position++;
+                if (position >= end) return;
 
-        var selectors = ParseSelectors(selectorText, line);
-        var body = new RuleBody(text[(open + 1)..close], selectorText, LineOf(text, open));
-        var declarations = ParseDeclarations(body, warnings);
-        position = close + 1;
-        return new StyleRule(selectors, declarations, order);
+                if (text[position] == '@')
+                {
+                    position = ReadAtRule(position, end, media);
+                }
+                else
+                {
+                    Rules.Add(ReadRule(ref position, end, media));
+                }
+            }
+        }
+
+        /// <summary>Reads an <c>@media</c> or <c>@supports</c> block, or skips any other at-rule.</summary>
+        private int ReadAtRule(int start, int end, MediaQueryList? media)
+        {
+            var nameEnd = start + 1;
+            while (nameEnd < end && (char.IsLetterOrDigit(text[nameEnd]) || text[nameEnd] == '-')) nameEnd++;
+            var name = text[(start + 1)..nameEnd].ToLowerInvariant();
+            if (name is not ("media" or "supports")) return SkipAtRule(start);
+
+            var line = LineOf(text, start);
+            var open = text.IndexOf('{', nameEnd);
+            if (open < 0 || open >= end) throw new FormatException($"line {line}: '@{name}' has no block.");
+            var prelude = text[nameEnd..open].Trim();
+            var close = MatchingBrace(text, open);
+            if (close < 0 || close > end) throw new FormatException($"line {line}: '@{name} {prelude}' is not closed.");
+
+            if (name == "media")
+            {
+                var list = WithLine(line, () => MediaQueryList.Parse(prelude));
+                ReadRules(open + 1, close, media is null ? list : MediaQueryList.And(media, list));
+            }
+            else if (WithLine(line, () => SupportsCondition.Evaluate(prelude)))
+            {
+                ReadRules(open + 1, close, media);
+            }
+            else
+            {
+                Warnings.Add($"line {line}: '@supports {prelude}' does not hold here; its rules are skipped.");
+            }
+            return close + 1;
+        }
+
+        private static T WithLine<T>(int line, Func<T> parse)
+        {
+            try
+            {
+                return parse();
+            }
+            catch (FormatException ex)
+            {
+                throw new FormatException($"line {line}: {ex.Message}", ex);
+            }
+        }
+
+        private StyleRule ReadRule(ref int position, int end, MediaQueryList? media)
+        {
+            var start = position;
+            var line = LineOf(text, start);
+            var open = text.IndexOf('{', start);
+            if (open < 0 || open >= end)
+            {
+                throw new FormatException($"line {line}: expected '{{' after '{text[start..Math.Min(end, text.Length)].Trim()}'.");
+            }
+
+            var selectorText = text[start..open].Trim();
+            var close = text.IndexOf('}', open);
+            if (close < 0 || close >= end) throw new FormatException($"line {LineOf(text, open)}: '{selectorText}' has no closing '}}'.");
+            if (selectorText.Contains('}')) throw new FormatException($"line {line}: a rule body was not opened before '{selectorText}'.");
+
+            var selectors = ParseSelectors(selectorText, line);
+            var body = new RuleBody(text[(open + 1)..close], selectorText, LineOf(text, open));
+            var declarations = ParseDeclarations(body, Warnings);
+            position = close + 1;
+            return new StyleRule(selectors, declarations, Rules.Count, media);
+        }
+
+        /// <summary>Skips a statement at-rule or a block at-rule and returns the position after it.</summary>
+        private int SkipAtRule(int start)
+        {
+            var end = text.IndexOfAny([';', '{'], start);
+            var name = text[start..(end < 0 ? text.Length : end)].Trim();
+            Warnings.Add($"line {LineOf(text, start)}: '{name}' is an at-rule; skipped.");
+            if (end < 0) return text.Length;
+            if (text[end] == ';') return end + 1;
+
+            var close = MatchingBrace(text, end);
+            if (close < 0) throw new FormatException($"line {LineOf(text, start)}: '{name}' is not closed.");
+            return close + 1;
+        }
     }
 
     private static List<Selector> ParseSelectors(string selectorText, int line)
@@ -142,18 +218,16 @@ public sealed class Stylesheet
         return declarations;
     }
 
-    /// <summary>Skips a statement at-rule or a block at-rule and returns the position after it.</summary>
-    private static int SkipAtRule(string text, int start, List<string> warnings)
+    private static void Validate(RuleBody body, string name, string value)
     {
-        var end = text.IndexOfAny([';', '{'], start);
-        var name = text[start..(end < 0 ? text.Length : end)].Trim();
-        warnings.Add($"line {LineOf(text, start)}: '{name}' is an at-rule; skipped.");
-        if (end < 0) return text.Length;
-        if (text[end] == ';') return end + 1;
-
-        var close = MatchingBrace(text, end);
-        if (close < 0) throw new FormatException($"line {LineOf(text, start)}: '{name}' is not closed.");
-        return close + 1;
+        try
+        {
+            StyleParser.Apply(Style.Default, name, value);
+        }
+        catch (FormatException ex)
+        {
+            throw body.Error($"'{name}: {value}' — {ex.Message}", ex);
+        }
     }
 
     /// <summary>The index of the brace that closes the one at <paramref name="open"/>, or -1.</summary>
@@ -173,18 +247,6 @@ public sealed class Stylesheet
             }
         }
         return -1;
-    }
-
-    private static void Validate(RuleBody body, string name, string value)
-    {
-        try
-        {
-            StyleParser.Apply(Style.Default, name, value);
-        }
-        catch (FormatException ex)
-        {
-            throw body.Error($"'{name}: {value}' — {ex.Message}", ex);
-        }
     }
 
     /// <summary>Blanks out comments, keeping line breaks so line numbers still hold.</summary>

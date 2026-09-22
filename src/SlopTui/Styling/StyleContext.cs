@@ -57,6 +57,12 @@ public sealed class StyleContext
 
     public HostElement? Focused { get; internal set; }
 
+    /// <summary>What <c>@media</c> is evaluated against, kept current by the app.</summary>
+    public MediaEnvironment Media { get; set; } = MediaEnvironment.Default;
+
+    /// <summary>Whether any sheet uses <c>@media</c>, so a change to <see cref="Media"/> restyles.</summary>
+    public bool UsesMedia => Sheets.Any(s => s.UsesMedia);
+
     public bool DependsOnFocus => Flags().Depends;
 
     /// <summary>Whether focus can restyle elements below the focused one and its ancestors.</summary>

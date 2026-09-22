@@ -61,6 +61,15 @@ return new TuiApp().Run<App>();
   basic ones follow the terminal's palette), `#rrggbb` or `rgb()`.
   Properties a terminal cannot draw, such as `font-family`, are ignored, so
   a page's stylesheet still loads.
+- **Media queries.** `@media` treats the terminal as the device: `width`
+  and `height` in cells, with `min-`/`max-` and the range syntax such as
+  `(60 <= width < 120)`; `orientation`; `aspect-ratio`;
+  `prefers-color-scheme`, from the terminal's own background colour;
+  `color`, from `COLORTERM`; `pointer`, from the mouse setting;
+  `prefers-reduced-motion`, set by the app; and `not`, `and`, `or`, nesting
+  and media types. A resize or a new colour scheme restyles what changed.
+  `@supports` is answered from the property parser. An unknown feature or a
+  pixel length makes a query false rather than failing the sheet.
 - **Component-scoped stylesheets.** A `Component.razor.css` beside a
   component is scoped to it exactly as Blazor does on the web, `::deep`
   included. The build embeds the bundle in the assembly and `TuiApp` loads
@@ -164,7 +173,7 @@ the web. See [docs/design.md](docs/design.md) for details.
 
 ## Not yet supported
 
-Sixel and iTerm2 inline images; `!important`; `@media`; pseudo-elements;
+Sixel and iTerm2 inline images; `!important`; `@container`; pseudo-elements;
 `margin: auto` centring; horizontal scrolling in `ScrollBox`; list markers;
 and clicks on inline elements, which go to the block that holds them.
 
