@@ -1,13 +1,13 @@
-<Box FlexGrow="1" Gap="1" Padding="new Edges(0, 1)">
-    @foreach (var align in Enum.GetValues<AlignItems>())
+<div class="page">
+    @foreach (var align in new[] { "stretch", "flex-start", "center", "flex-end" })
     {
-        <Box FlexDirection="FlexDirection.Column" FlexGrow="1" Border="BorderStyle.Single" BorderColor="Color.BrightBlack">
-            <Text Dim="true"> @align</Text>
-            <Box FlexGrow="1" AlignItems="align" Gap="1" Padding="new Edges(0, 1)">
-                <Chip Label="1" Padding="new Edges(0, 1)" />
-                <Chip Label="2" Background="Color.Green" Foreground="Color.Black" Padding="new Edges(1, 1)" />
-                <Chip Label="3" Background="Color.Red" Padding="new Edges(2, 1)" />
-            </Box>
-        </Box>
+        <div class="panel">
+            <div class="label"> @align</div>
+            <div class="items" style="align-items: @align">
+                <Chip Label="1" />
+                <Chip Label="2" Style="background: green; color: black; padding: 1 1" />
+                <Chip Label="3" Style="background: red; padding: 2 1" />
+            </div>
+        </div>
     }
-</Box>
+</div>

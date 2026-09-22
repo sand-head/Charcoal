@@ -1,16 +1,16 @@
 @inject TuiApp Tui
 
-<Box FlexDirection="FlexDirection.Column" Padding="new Edges(1, 2)" Gap="1" focusable="true" @onkeypress="OnKey">
-    <Text Bold="true">pick a fruit · ↑ ↓ j k move · Enter or click picks · q quits</Text>
-    <Box FlexDirection="FlexDirection.Column" Border="BorderStyle.Single" BorderColor="Color.BrightBlack" Width="40">
+<div class="app" tabindex="0" @onkeypress="OnKey">
+    <div class="title">pick a fruit · ↑ ↓ j k move · Enter or click picks · q quits</div>
+    <div class="list">
         @for (var i = 0; i < Fruits.Length; i++)
         {
             var index = i;
             <Row @key="Fruits[index]" Label="@Fruits[index]" Selected="index == _selected" OnPick="() => Pick(index)" OnHover="() => _selected = index" />
         }
-    </Box>
-    <Text>@(_picked is null ? "nothing picked yet" : $"you picked {_picked}")</Text>
-</Box>
+    </div>
+    <div>@(_picked is null ? "nothing picked yet" : $"you picked {_picked}")</div>
+</div>
 
 @code {
     private static readonly string[] Fruits = ["apple", "banana", "cherry", "date", "elderberry", "fig", "grape", "honeydew"];

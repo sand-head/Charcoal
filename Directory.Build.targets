@@ -1,0 +1,4 @@
+<Project>
+  <!-- The targets the package ships, for projects in this repo that reference the library directly. -->
+  <Import Project="$(MSBuildThisFileDirectory)src/SlopTui/build/SlopTui.targets" Condition="'$(MSBuildProjectName)' != 'SlopTui'" />
+</Project>

@@ -1,0 +1,4 @@
+.page { display: flex; flex: 1; gap: 1; padding: 0 1 }
+.row { display: flex; gap: 1 }
+.column { display: flex; flex-direction: column; gap: 1 }
+.cell { border: solid; padding: 0 1 }

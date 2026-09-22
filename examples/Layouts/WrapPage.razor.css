@@ -1,0 +1,6 @@
+.page { display: flex; flex-direction: column; flex: 1; gap: 1; padding: 0 1 }
+.wrap { display: flex; flex-wrap: wrap; gap: 1 }
+.grow { flex: 1; padding: 0 1 }
+.row { display: flex; flex: 1; gap: 1 }
+.panel { display: flex; flex-direction: column; flex: 1; border: solid bright-black }
+.muted { opacity: 0.5; white-space: pre }

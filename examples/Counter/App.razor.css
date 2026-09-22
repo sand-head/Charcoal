@@ -1,0 +1,4 @@
+.app { display: flex; flex-direction: column; gap: 1; padding: 1 2; height: 100% }
+.title { font-weight: bold }
+.row { display: flex; gap: 2 }
+.muted { opacity: 0.5 }

@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Text;
 using SlopTui.Components;
 
@@ -14,28 +15,72 @@ public enum Combinator
     Child,
 }
 
+/// <summary><c>[name]</c>, which requires the attribute, or <c>[name=value]</c>, which requires that value.</summary>
+public sealed record AttributeSelector(string Name, string? Value)
+{
+    public bool Matches(HostElement element)
+    {
+        if (!element.Attributes.TryGetValue(Name, out var actual)) return false;
+        if (actual is false) return false;
+        if (Value is null) return true;
+
+        var text = actual is true ? "" : actual?.ToString() ?? "";
+        return string.Equals(text, Value, StringComparison.Ordinal);
+    }
+
+    public override string ToString() => Value is null ? $"[{Name}]" : $"[{Name}=\"{Value}\"]";
+}
+
+[Flags]
+public enum PseudoClass
+{
+    None = 0,
+    Focus = 1,
+    FocusWithin = 2,
+    Root = 4,
+    FirstChild = 8,
+    LastChild = 16,
+}
+
 /// <summary>
-/// A type, classes, an id and focus pseudo classes that must all hold for
-/// one element.
+/// A type, classes, an id, attribute conditions and pseudo-classes that must
+/// all hold for one element.
 /// </summary>
 public sealed record CompoundSelector(
     string? Type,
     IReadOnlyList<string> Classes,
     string? Id,
-    bool Focus,
-    bool FocusWithin,
+    IReadOnlyList<AttributeSelector> Attributes,
+    PseudoClass Pseudo,
     Combinator Combinator)
 {
+    public bool Focus => Has(PseudoClass.Focus);
+    public bool FocusWithin => Has(PseudoClass.FocusWithin);
+
+    private bool Has(PseudoClass pseudoClass) => (Pseudo & pseudoClass) != 0;
+
     public bool Matches(HostElement element, HostElement? focused)
     {
-        if (Type is not null && Type != "*" && !string.Equals(Type, element.Name, StringComparison.Ordinal)) return false;
+        if (Type is not null && Type != "*" && !string.Equals(Type, element.Name, StringComparison.OrdinalIgnoreCase)) return false;
         if (Id is not null && !string.Equals(Id, element.Id, StringComparison.Ordinal)) return false;
         foreach (var name in Classes)
         {
             if (!element.Classes.Contains(name)) return false;
         }
+        foreach (var attribute in Attributes)
+        {
+            if (!attribute.Matches(element)) return false;
+        }
+        return MatchesPseudoClasses(element, focused);
+    }
+
+    private bool MatchesPseudoClasses(HostElement element, HostElement? focused)
+    {
         if (Focus && !ReferenceEquals(element, focused)) return false;
         if (FocusWithin && !Contains(element, focused)) return false;
+        if (Has(PseudoClass.Root) && element.Parent?.ClosestElement is not null) return false;
+        if (Has(PseudoClass.FirstChild) && !IsFirstChild(element)) return false;
+        if (Has(PseudoClass.LastChild) && !IsLastChild(element)) return false;
         return true;
     }
 
@@ -48,13 +93,45 @@ public sealed record CompoundSelector(
         return false;
     }
 
+    private static bool IsFirstChild(HostElement element)
+    {
+        var parent = element.Parent?.ClosestElement;
+        return parent is null || ReferenceEquals(ElementChildren(parent).FirstOrDefault(), element);
+    }
+
+    private static bool IsLastChild(HostElement element)
+    {
+        var parent = element.Parent?.ClosestElement;
+        return parent is null || ReferenceEquals(ElementChildren(parent).LastOrDefault(), element);
+    }
+
+    /// <summary>An element's child elements, looking through the components in between.</summary>
+    private static IEnumerable<HostElement> ElementChildren(HostNode node)
+    {
+        foreach (var child in node.Children)
+        {
+            if (child is HostElement element)
+            {
+                yield return element;
+            }
+            else if (child is HostContainer container)
+            {
+                foreach (var inner in ElementChildren(container)) yield return inner;
+            }
+        }
+    }
+
     public override string ToString()
     {
         var text = new StringBuilder(Type ?? "");
         if (Id is not null) text.Append('#').Append(Id);
         foreach (var name in Classes) text.Append('.').Append(name);
+        foreach (var attribute in Attributes) text.Append(attribute);
         if (Focus) text.Append(":focus");
         if (FocusWithin) text.Append(":focus-within");
+        if (Has(PseudoClass.Root)) text.Append(":root");
+        if (Has(PseudoClass.FirstChild)) text.Append(":first-child");
+        if (Has(PseudoClass.LastChild)) text.Append(":last-child");
         return text.Length == 0 ? "*" : text.ToString();
     }
 }
@@ -74,7 +151,7 @@ public sealed class Selector
 
     public string Text { get; }
 
-    /// <summary>CSS specificity as ids × 10000 + (classes and pseudo classes) × 100 + types.</summary>
+    /// <summary>CSS specificity as ids × 10000 + (classes, attributes and pseudo classes) × 100 + types.</summary>
     public int Specificity { get; }
 
     /// <summary>Whether a focus pseudo class appears left of a combinator, so focus can restyle descendants.</summary>
@@ -93,9 +170,7 @@ public sealed class Selector
         foreach (var compound in compounds)
         {
             if (compound.Id is not null) ids++;
-            classes += compound.Classes.Count;
-            if (compound.Focus) classes++;
-            if (compound.FocusWithin) classes++;
+            classes += compound.Classes.Count + compound.Attributes.Count + BitOperations.PopCount((uint)compound.Pseudo);
             if (compound.Type is not null && compound.Type != "*") types++;
         }
         return ids * 10_000 + classes * 100 + types;
@@ -138,6 +213,15 @@ public sealed class Selector
 
     private sealed class SelectorReader(string text)
     {
+        private static readonly Dictionary<string, PseudoClass> PseudoClasses = new(StringComparer.Ordinal)
+        {
+            ["focus"] = PseudoClass.Focus,
+            ["focus-within"] = PseudoClass.FocusWithin,
+            ["root"] = PseudoClass.Root,
+            ["first-child"] = PseudoClass.FirstChild,
+            ["last-child"] = PseudoClass.LastChild,
+        };
+
         private int _position;
 
         private bool AtEnd => _position >= text.Length;
@@ -187,8 +271,8 @@ public sealed class Selector
             string? type = null;
             string? id = null;
             var classes = new List<string>();
-            var focus = false;
-            var focusWithin = false;
+            var attributes = new List<AttributeSelector>();
+            var pseudo = PseudoClass.None;
 
             var start = _position;
             while (!AtEnd && !char.IsWhiteSpace(Current) && Current != '>')
@@ -204,21 +288,13 @@ public sealed class Selector
                         _position++;
                         id = ReadName("id");
                         break;
+                    case '[':
+                        _position++;
+                        attributes.Add(ReadAttribute());
+                        break;
                     case ':':
                         _position++;
-                        var pseudoClass = ReadName("pseudo-class");
-                        if (pseudoClass == "focus")
-                        {
-                            focus = true;
-                        }
-                        else if (pseudoClass == "focus-within")
-                        {
-                            focusWithin = true;
-                        }
-                        else
-                        {
-                            throw Error($"':{pseudoClass}' is not a supported pseudo-class (focus, focus-within)");
-                        }
+                        pseudo |= ReadPseudoClass();
                         break;
                     case '*':
                         if (!isFirstPart) throw Error("a type must come first in a compound");
@@ -227,22 +303,74 @@ public sealed class Selector
                         break;
                     case var c when IsNameChar(c):
                         if (!isFirstPart) throw Error("a type must come first in a compound");
-                        type = ReadName("type");
+                        type = ReadName("type").ToLowerInvariant();
                         break;
                     default:
                         throw Error($"unexpected '{Current}'");
                 }
             }
-            return new CompoundSelector(type, classes, id, focus, focusWithin, combinator);
+            return new CompoundSelector(type, classes, id, attributes, pseudo, combinator);
+        }
+
+        private PseudoClass ReadPseudoClass()
+        {
+            if (!AtEnd && Current == ':') throw Error("pseudo-elements are not supported");
+            var name = ReadName("pseudo-class");
+            if (PseudoClasses.TryGetValue(name, out var pseudoClass)) return pseudoClass;
+            throw Error($"':{name}' is not a supported pseudo-class ({string.Join(", ", PseudoClasses.Keys)})");
+        }
+
+        /// <summary>Reads <c>name]</c> or <c>name=value]</c>, the value bare or quoted.</summary>
+        private AttributeSelector ReadAttribute()
+        {
+            SkipWhitespace();
+            var name = ReadName("attribute");
+            SkipWhitespace();
+            if (AtEnd) throw Error("'[' is not closed");
+            if (Current == ']')
+            {
+                _position++;
+                return new AttributeSelector(name, null);
+            }
+            if (Current != '=') throw Error("only [name] and [name=value] attribute selectors are supported");
+
+            _position++;
+            SkipWhitespace();
+            var value = ReadAttributeValue();
+            SkipWhitespace();
+            if (AtEnd || Current != ']') throw Error("'[' is not closed");
+            _position++;
+            return new AttributeSelector(name, value);
+        }
+
+        private string ReadAttributeValue()
+        {
+            if (AtEnd || Current is not ('"' or '\'')) return ReadWhile(c => c != ']' && !char.IsWhiteSpace(c));
+
+            var quote = Current;
+            _position++;
+            var value = ReadWhile(c => c != quote);
+            if (AtEnd) throw Error("an attribute value is not closed");
+            _position++;
+            return value;
         }
 
         private string ReadName(string kind)
         {
             var start = _position;
-            while (!AtEnd && IsNameChar(Current)) _position++;
-            if (_position == start) throw Error($"a {kind} name is missing at position {start}");
+            var name = ReadWhile(IsNameChar);
+            if (name.Length == 0) throw Error($"a {kind} name is missing at position {start}");
+            return name;
+        }
+
+        private string ReadWhile(Func<char, bool> predicate)
+        {
+            var start = _position;
+            while (!AtEnd && predicate(Current)) _position++;
             return text[start.._position];
         }
+
+        private void SkipWhitespace() => ReadWhile(char.IsWhiteSpace);
 
         private static bool IsNameChar(char c) => char.IsLetterOrDigit(c) || c is '-' or '_';
 

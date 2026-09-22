@@ -9,10 +9,10 @@ namespace SlopTui.Tests.Components;
 public class StyledComponentsTests
 {
     private const string Css = """
-        .panel { padding: 0 1; border: single }
+        .panel { padding: 0 1; border: solid }
         .panel:focus { border: double; border-color: green }
-        .panel:focus-within text { color: green }
-        .panel.hot text { color: red; bold: true }
+        .panel:focus-within p { color: green }
+        .panel.hot p { color: red; font-weight: bold }
         """;
 
     private static (TuiApp App, HeadlessTerminal Terminal, Task<int> Run) Start()
@@ -46,7 +46,7 @@ public class StyledComponentsTests
 
         var first = ById(app, "first");
         Assert.Equal(new Edges(0, 1), first.Node.Style.Padding);
-        Assert.Equal(BorderStyle.Single, first.Node.Style.Border);
+        Assert.Equal(BorderStyle.Solid, first.Node.Style.BorderStyle);
         Assert.Equal(Color.Default, ById(app, "first-text").Node.Style.Color);
 
         app.Exit();
@@ -61,14 +61,14 @@ public class StyledComponentsTests
         var second = ById(app, "second");
 
         terminal.Inject("\t");
-        WaitUntil(() => ReferenceEquals(app.Focus.Focused, first) && first.Node.Style.Border == BorderStyle.Double, "the first panel focused and restyled");
+        WaitUntil(() => ReferenceEquals(app.Focus.Focused, first) && first.Node.Style.BorderStyle == BorderStyle.Double, "the first panel focused and restyled");
         Assert.Equal(Color.Green, first.Node.Style.BorderColor);
         Assert.Equal(Color.Green, ById(app, "first-text").Node.Style.Color);
-        Assert.Equal(BorderStyle.Single, second.Node.Style.Border);
+        Assert.Equal(BorderStyle.Solid, second.Node.Style.BorderStyle);
 
         terminal.Inject("\t");
-        WaitUntil(() => ReferenceEquals(app.Focus.Focused, second) && second.Node.Style.Border == BorderStyle.Double, "the second panel focused and restyled");
-        Assert.Equal(BorderStyle.Single, first.Node.Style.Border);
+        WaitUntil(() => ReferenceEquals(app.Focus.Focused, second) && second.Node.Style.BorderStyle == BorderStyle.Double, "the second panel focused and restyled");
+        Assert.Equal(BorderStyle.Solid, first.Node.Style.BorderStyle);
         Assert.Equal(Color.Default, ById(app, "first-text").Node.Style.Color);
         Assert.Equal(Color.Green, ById(app, "second-text").Node.Style.Color);
 
@@ -106,10 +106,10 @@ public class StyledComponentsTests
         var (app, terminal, run) = Start();
         var framesBefore = terminal.Writes.Count;
 
-        await app.InvokeAsync(() => app.AddStylesheet("#root { padding: 2 } .panel { border: round }"));
+        await app.InvokeAsync(() => app.AddStylesheet("#root { padding: 2 } .panel { border-radius: 1 }"));
 
         WaitUntil(() => ById(app, "root").Node.Style.Padding == new Edges(2), "the new sheet applied");
-        Assert.Equal(BorderStyle.Round, ById(app, "first").Node.Style.Border);
+        Assert.Equal(BorderGlyphSet.Round, ById(app, "first").Node.Style.BorderGlyphs);
         WaitUntil(() => terminal.Writes.Count > framesBefore, "a repaint");
 
         app.Exit();
@@ -117,10 +117,10 @@ public class StyledComponentsTests
     }
 
     private const string CardCss = """
-        .card { color: white; border: single }
+        .card { color: white; border: solid }
         .card:focus { border-color: bright-green }
         .card:focus > .heading { color: bright-green }
-        .card .heading { bold: true }
+        .card .heading { font-weight: bold }
         """;
 
     [Fact]

@@ -72,7 +72,7 @@ public class PainterTests
     public void The_border_is_drawn_inside_the_rect()
     {
         var buffer = new CellBuffer(4, 3);
-        Painter.Paint(Box(new Style { Border = BorderStyle.Single }, new Rect(0, 0, 4, 3)), buffer);
+        Painter.Paint(Box(new Style { BorderStyle = BorderStyle.Solid }, new Rect(0, 0, 4, 3)), buffer);
         Assert.Equal(["┌──┐", "│  │", "└──┘"], Rows(buffer));
     }
 
@@ -81,7 +81,7 @@ public class PainterTests
     {
         var buffer = new CellBuffer(6, 3);
         var child = new TextNode(new Style(), "abcdefgh") { At = new Rect(1, 1, 8, 1) };
-        var parent = Box(new Style { Border = BorderStyle.Single, Overflow = Overflow.Hidden }, new Rect(0, 0, 6, 3), child);
+        var parent = Box(new Style { BorderStyle = BorderStyle.Solid, Overflow = Overflow.Hidden }, new Rect(0, 0, 6, 3), child);
         Painter.Paint(parent, buffer);
         Assert.Equal("│abcd│", Rows(buffer)[1]);
     }
@@ -161,7 +161,7 @@ public class PainterTests
     }
 
     [Fact]
-    public void Unstyled_runs_inherit_the_element_colour_and_styled_runs_keep_theirs()
+    public void Unstyled_runs_take_the_leaf_colours_and_every_run_keeps_its_own_flags()
     {
         var buffer = new CellBuffer(4, 1);
         var text = new TextNode(
@@ -174,10 +174,10 @@ public class PainterTests
         Painter.Paint(text, buffer);
         Assert.Equal(Color.Green, buffer[0, 0].Foreground);
         Assert.Equal(Color.Black, buffer[0, 0].Background);
-        Assert.Equal(TextStyle.Bold, buffer[0, 0].Style);
+        Assert.Equal(TextStyle.None, buffer[0, 0].Style);   // the host bakes the leaf's flags into its runs; the painter adds nothing
         Assert.Equal(Color.Red, buffer[1, 0].Foreground);
         Assert.Equal(Color.Black, buffer[1, 0].Background);
-        Assert.Equal(TextStyle.Bold | TextStyle.Underline, buffer[1, 0].Style);
+        Assert.Equal(TextStyle.Underline, buffer[1, 0].Style);   // a run carries the flags its element resolved; the leaf's are not added
     }
 
     [Fact]
@@ -258,7 +258,7 @@ public class PainterTests
         var painted = 0;
         var seen = new CanvasNode((_, _) => painted++);
         var hidden = new CanvasNode((_, _) => painted++);
-        var column = new BoxNode(new Style { FlexDirection = FlexDirection.Column, JustifyContent = JustifyContent.FlexEnd, Height = 2 }, hidden, seen);
+        var column = new BoxNode(new Style { Display = Display.Flex, FlexDirection = FlexDirection.Column, JustifyContent = JustifyContent.FlexEnd, Height = 2 }, hidden, seen);
         hidden.Style = new Style { Height = 2, FlexShrink = 0 };
         seen.Style = new Style { Height = 2, FlexShrink = 0 };
         FlexLayout.Layout(column, new Size(10, 2));
@@ -267,5 +267,34 @@ public class PainterTests
         Painter.Paint(column, new CellBuffer(10, 2));
 
         Assert.Equal(1, painted);
+    }
+
+    [Fact]
+    public void Text_align_centres_and_right_aligns_each_line_and_visibility_hidden_paints_nothing()
+    {
+        var buffer = new CellBuffer(10, 2);
+        var text = new TextNode(new Style { TextAlign = TextAlign.Center }, "ab\ncdef") { At = new Rect(0, 0, 10, 2) };
+        Painter.Paint(text, buffer);
+        Assert.Equal(["    ab", "   cdef"], buffer.ToString().Split('\n'));
+
+        buffer = new CellBuffer(10, 1);
+        Painter.Paint(new TextNode(new Style { TextAlign = TextAlign.Right }, "ab") { At = new Rect(0, 0, 10, 1) }, buffer);
+        Assert.Equal("        ab", buffer.ToString());
+
+        buffer = new CellBuffer(10, 1);
+        Painter.Paint(new TextNode(new Style { Visibility = Visibility.Hidden, Background = Color.Red }, "ab") { At = new Rect(0, 0, 10, 1) }, buffer);
+        Assert.Equal("", buffer.ToString());
+        Assert.Equal(Color.Default, buffer[0, 0].Background);
+    }
+
+    [Fact]
+    public void Text_without_a_background_sits_on_the_box_fill_beneath_it()
+    {
+        var buffer = new CellBuffer(4, 1);
+        var text = new TextNode(new Style(), "ab") { At = new Rect(0, 0, 4, 1) };
+        var box = Box(new Style { Background = Color.Blue }, new Rect(0, 0, 4, 1), text);
+        Painter.Paint(box, buffer);
+        Assert.Equal(Color.Blue, buffer[0, 0].Background);
+        Assert.Equal("a", buffer[0, 0].Cluster);
     }
 }

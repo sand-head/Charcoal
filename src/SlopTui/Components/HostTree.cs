@@ -36,9 +36,25 @@ public abstract class HostNode
         child.Parent?.DetachChild(child);
         _children.Insert(Math.Clamp(index, 0, _children.Count), child);
         child.Parent = this;
-        // Selectors with combinators and inherited colours need the ancestors.
-        if (child is HostElement element) element.Restyle();
+        RestyleInserted(child);
         StructureChanged();
+    }
+
+    /// <summary>
+    /// Resolves the styles of inserted elements, now that their ancestors are
+    /// known. A container can arrive already holding parsed markup.
+    /// </summary>
+    private static void RestyleInserted(HostNode child)
+    {
+        if (child is HostElement element)
+        {
+            element.Restyle();
+            return;
+        }
+        foreach (var inner in child.Descendants().OfType<HostElement>())
+        {
+            inner.Restyle();
+        }
     }
 
     internal HostNode RemoveChildAt(int index)
@@ -90,7 +106,7 @@ public sealed class HostContainer : HostNode
     public int? ComponentId { get; internal set; }
 }
 
-/// <summary>A text frame, collected into runs by the enclosing <c>text</c> element.</summary>
+/// <summary>A text frame, collected into a text leaf by the block it stands in.</summary>
 public sealed class HostTextNode : HostNode
 {
     private string _text = "";
@@ -101,91 +117,77 @@ public sealed class HostTextNode : HostNode
         internal set
         {
             if (_text == value) return;
+            // Empty and whitespace-only text may make no leaf, so a change
+            // between those and real text regroups the block's leaves.
+            var regroup = KindOf(_text) != KindOf(value);
             _text = value;
-            ContentChanged();
+            if (regroup)
+            {
+                StructureChanged();
+            }
+            else
+            {
+                ContentChanged();
+            }
         }
+    }
+
+    private enum TextKind { Empty, Whitespace, Content }
+
+    private static TextKind KindOf(string text)
+    {
+        if (text.Length == 0) return TextKind.Empty;
+        return string.IsNullOrWhiteSpace(text) ? TextKind.Whitespace : TextKind.Content;
     }
 }
 
 /// <summary>
-/// A <c>box</c>, <c>text</c> or <c>canvas</c> element. Its layout children are
-/// its descendant elements with containers flattened out; a <c>text</c>
-/// element is a leaf whose nested <c>text</c> elements are styled runs. HTML
-/// inline tags such as <c>strong</c> and <c>br</c> are text elements with a
-/// preset style, and any other name is a box.
+/// An element under its HTML name, with its attributes and resolved style.
+/// A block, flex or grid element is a box the layout engine arranges; an
+/// inline element is a styled run of the text around it; <c>img</c> and
+/// <c>canvas</c> are leaves that paint themselves.
 /// </summary>
 /// <remarks>
-/// The style is rebuilt from all the attributes whenever one changes, so a
-/// removed attribute falls back to its default.
+/// <para>
+/// A box's layout children are its descendant boxes with containers
+/// flattened out. Text and inline elements between them are grouped into
+/// anonymous text leaves, as CSS wraps a block's inline content.
+/// </para>
+/// <para>
+/// The style is resolved through the whole cascade whenever an attribute
+/// changes, so a removed attribute falls back to what the sheets say.
+/// </para>
 /// </remarks>
 public sealed class HostElement : HostNode
 {
+    private static readonly IReadOnlySet<string> NoClasses = new HashSet<string>();
+
     private readonly Dictionary<string, object?> _attributes = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ulong> _handlers = new(StringComparer.Ordinal);
+    private readonly StyleContext? _styles;
+    private readonly bool _deferred;
     private List<LayoutNode>? _layoutChildren;
     private List<TextRun>? _runs;
 
-    private readonly CanvasRegistry? _canvases;
-    private readonly StyleContext? _styles;
-    private static readonly IReadOnlySet<string> NoClasses = new HashSet<string>();
+    public HostElement(string name, StyleContext? styles = null, Graphics? graphics = null)
+        : this(name, styles, graphics, deferred: false) { }
 
-    /// <summary>
-    /// The text style each HTML inline tag starts from. Stylesheets and
-    /// attributes apply on top, as over a browser's default stylesheet.
-    /// </summary>
-    private static readonly Dictionary<string, TextStyle> HtmlInline = new(StringComparer.Ordinal)
+    /// <param name="deferred">
+    /// Whether to leave the style unresolved until insertion. The renderer
+    /// sets every attribute before inserting, so resolving once at insertion
+    /// saves resolving once per attribute.
+    /// </param>
+    internal HostElement(string name, StyleContext? styles, Graphics? graphics, bool deferred)
     {
-        ["strong"] = TextStyle.Bold,
-        ["b"] = TextStyle.Bold,
-        ["em"] = TextStyle.Italic,
-        ["i"] = TextStyle.Italic,
-        ["u"] = TextStyle.Underline,
-        ["s"] = TextStyle.Strikethrough,
-        ["del"] = TextStyle.Strikethrough,
-        ["strike"] = TextStyle.Strikethrough,
-        ["mark"] = TextStyle.Inverse,
-        ["span"] = TextStyle.None,
-        ["br"] = TextStyle.None,
-    };
-
-    private static readonly string[] BlockTags =
-        ["div", "p", "section", "article", "main", "header", "footer", "nav", "aside", "ul", "ol", "li", "pre", "blockquote"];
-
-    private static readonly string[] HeadingTags = ["h1", "h2", "h3", "h4", "h5", "h6"];
-
-    /// <summary>HTML block tags are boxes whose children stack, where a <c>box</c> is a row. Headings are bold.</summary>
-    private static readonly Dictionary<string, Style> HtmlBlock = BlockStyles();
-
-    private static Dictionary<string, Style> BlockStyles()
-    {
-        var column = Style.Default with { FlexDirection = FlexDirection.Column };
-        var heading = column with { TextStyle = TextStyle.Bold };
-        var styles = new Dictionary<string, Style>(StringComparer.Ordinal);
-        foreach (var tag in BlockTags) styles[tag] = column;
-        foreach (var tag in HeadingTags) styles[tag] = heading;
-        return styles;
-    }
-
-    public HostElement(string name, CanvasRegistry? canvases = null, StyleContext? styles = null, Graphics? graphics = null)
-    {
-        Name = name;
+        Name = name.ToLowerInvariant();
         Graphics = graphics;
-        IsText = name == "text" || HtmlInline.ContainsKey(name);
-        IsInline = IsText && name != "text";
-        IsBreak = name == "br";
-        IsImage = name == "img";
-        BaseStyle = PresetStyle(name);
+        IsBreak = Name == "br";
+        IsImage = Name == "img";
+        IsCanvas = Name == "canvas";
         Node = ElementLayoutNode.For(this);
-        _canvases = canvases;
         _styles = styles;
-        if (_styles is not null && _styles.Sheets.Count > 0) Rebuild(null);
-    }
-
-    private static Style PresetStyle(string name)
-    {
-        if (HtmlInline.TryGetValue(name, out var flags) && flags != TextStyle.None) return Style.Default with { TextStyle = flags };
-        if (HtmlBlock.TryGetValue(name, out var block)) return block;
-        return Style.Default;
+        _deferred = deferred;
+        if (!deferred) Rebuild(null);
     }
 
     /// <summary>The terminal's picture capabilities, or null outside an app.</summary>
@@ -196,41 +198,41 @@ public sealed class HostElement : HostNode
 
     public string? Id { get; private set; }
 
-    /// <summary>The element name as written, which type selectors match.</summary>
+    /// <summary>The <c>style</c> attribute as written, or null.</summary>
+    public string? InlineStyle { get; private set; }
+
+    /// <summary>The element name, lower-cased, which type selectors match.</summary>
     public string Name { get; }
 
     public ElementLayoutNode Node { get; }
 
-    /// <summary>Whether this is <c>text</c> or an HTML inline tag.</summary>
-    public bool IsText { get; }
-
-    /// <summary>
-    /// Whether this is an HTML inline tag such as <c>strong</c> or <c>span</c>.
-    /// It is always a styled run: under a box it joins the text beside it in
-    /// an anonymous text leaf.
-    /// </summary>
-    public bool IsInline { get; }
+    /// <summary>Whether this element is a run within the text around it, as <c>display: inline</c> makes it.</summary>
+    public bool IsInline => Node.Style.IsInline && !IsImage && !IsCanvas;
 
     /// <summary>Whether this is a <c>&lt;br&gt;</c>.</summary>
     public bool IsBreak { get; }
 
     public bool IsImage { get; }
 
-    /// <summary>The style the cascade starts from: the tag's preset, if it has one.</summary>
-    internal Style BaseStyle { get; }
+    public bool IsCanvas { get; }
 
-    public bool IsCanvas => Name == "canvas";
-
-    /// <summary>
-    /// Whether this text element is a run within something else: an inline
-    /// tag, or a <c>text</c> nested in another.
-    /// </summary>
-    public bool IsInlineText => IsText && (IsInline || Parent?.ClosestElement is { IsText: true });
-
+    /// <summary>Whether the element has a <c>tabindex</c>, so a click can focus it.</summary>
     public bool Focusable { get; private set; }
 
-    /// <summary>Where this element wants the caret, relative to its content box.</summary>
-    public (int Column, int Row)? Cursor { get; private set; }
+    /// <summary>Whether Tab reaches this element, which takes a <c>tabindex</c> of zero or more.</summary>
+    public bool Tabbable { get; private set; }
+
+    /// <summary>The id of the <c>ElementReference</c> a component captured for this element.</summary>
+    internal string? ReferenceId { get; set; }
+
+    /// <summary>
+    /// Where the terminal caret goes while this element is focused, relative
+    /// to its content box, from the <c>caret="col,row"</c> attribute.
+    /// </summary>
+    public (int Column, int Row)? Caret { get; private set; }
+
+    /// <summary>What a <c>canvas</c> element paints with.</summary>
+    public Action<CellBuffer, Rect>? Painter { get; set; }
 
     public IReadOnlyDictionary<string, object?> Attributes => _attributes;
 
@@ -257,45 +259,91 @@ public sealed class HostElement : HostNode
     }
 
     /// <summary>
-    /// Resolves the style again, and the descendants' too when a class, an id
-    /// or an inherited property changed.
+    /// Resolves the style again, and the descendants' when an attribute a
+    /// selector might test or an inherited property changed.
     /// </summary>
     internal void Restyle() => Rebuild(null);
 
     private void Rebuild(string? changed)
     {
+        ReadAttributes();
+        if (_deferred && Parent is null) return;
+
         var previous = Node.Style;
-        ReadIdentity();
-        Node.Style = _styles is null
-            ? StyleResolver.Inherit(this, ApplyOwnAttributes(BaseStyle))
-            : StyleResolver.Resolve(this, _styles.Sheets, _styles.Focused);
+        var style = ResolveStyle(previous);
+        Node.Style = style;
 
-        var lookChanged = previous.Color != Node.Style.Color
-            || previous.Background != Node.Style.Background
-            || previous.TextStyle != Node.Style.TextStyle;
+        var inheritedChanged = previous.Color != style.Color
+            || previous.TextStyle != style.TextStyle
+            || previous.WhiteSpace != style.WhiteSpace
+            || previous.TextAlign != style.TextAlign
+            || !ReferenceEquals(previous.CustomProperties, style.CustomProperties);
+        var lookChanged = inheritedChanged || previous.Background != style.Background;
+        if (lookChanged) _runs = null;
 
-        // Text runs carry their colours and flags, so a new look invalidates them.
-        if (IsInlineText)
+        if (previous.IsInline != style.IsInline)
         {
-            Parent?.ClosestElement?.DescendantsChanged(structural: false);
+            Parent?.ClosestElement?.DescendantsChanged(structural: true);
         }
-        else if (IsText && lookChanged)
+        else if (IsInline)
         {
-            DescendantsChanged(structural: false);
+            if (lookChanged || changed is not null) Parent?.ClosestElement?.DescendantsChanged(structural: false);
         }
-        else if (!IsText)
+        else if (lookChanged)
         {
-            // Anonymous text takes its look from this box and its ancestors,
-            // and a restyle may have come from any of them.
             RestyleAnonymousText();
         }
 
         if (Node is ImageLayoutNode image && changed is "src" or "alt") image.Reload();
 
-        var affectsDescendants = changed is "class" or "id"
-            || previous.Color != Node.Style.Color
-            || previous.TextStyle != Node.Style.TextStyle;
+        var affectsDescendants = inheritedChanged || changed is not null and not "style";
         if (affectsDescendants) RestyleDescendants();
+    }
+
+    private Style ResolveStyle(Style previous)
+    {
+        var sheets = _styles?.Sheets ?? (IReadOnlyList<Stylesheet>)[];
+        var style = StyleResolver.Resolve(this, sheets, _styles?.Focused);
+        if (IsImage) style = WithImageSize(style);
+
+        // Keeping the old map when the content is the same lets the style
+        // compare equal, so nothing below restyles.
+        var sameCustomProperties = !ReferenceEquals(previous.CustomProperties, style.CustomProperties)
+            && HaveSameEntries(previous.CustomProperties, style.CustomProperties);
+        return sameCustomProperties ? style with { CustomProperties = previous.CustomProperties } : style;
+    }
+
+    private static bool HaveSameEntries(IReadOnlyDictionary<string, string> a, IReadOnlyDictionary<string, string> b)
+    {
+        if (a.Count != b.Count) return false;
+        foreach (var (key, value) in a)
+        {
+            if (!b.TryGetValue(key, out var other) || other != value) return false;
+        }
+        return true;
+    }
+
+    /// <summary>Applies an <c>img</c>'s <c>width</c> and <c>height</c> attributes where the cascade set no size.</summary>
+    private Style WithImageSize(Style style)
+    {
+        if (style.Width.IsAuto && TryLengthAttribute("width", out var width)) style = style with { Width = width };
+        if (style.Height.IsAuto && TryLengthAttribute("height", out var height)) style = style with { Height = height };
+        return style;
+    }
+
+    private bool TryLengthAttribute(string name, out Length length)
+    {
+        length = Length.Auto;
+        if (!_attributes.TryGetValue(name, out var value) || value is null) return false;
+        try
+        {
+            length = StyleParser.Apply(Style.Default, "width", value).Width;
+            return true;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
     }
 
     internal void RestyleDescendants()
@@ -304,48 +352,6 @@ public sealed class HostElement : HostNode
         {
             element.Rebuild(null);
         }
-    }
-
-    private void ReadIdentity()
-    {
-        Id = _attributes.TryGetValue("id", out var id) ? id?.ToString() : null;
-        Classes = _attributes.TryGetValue("class", out var classes) ? ParseClasses(classes) : NoClasses;
-    }
-
-    /// <summary>
-    /// Applies this element's attributes over <paramref name="style"/>, the
-    /// inline <c>style</c> last, and reads <c>focusable</c> and <c>cursor</c>.
-    /// </summary>
-    internal Style ApplyOwnAttributes(Style style)
-    {
-        Focusable = false;
-        Cursor = null;
-        string? inline = null;
-        foreach (var (name, value) in _attributes)
-        {
-            switch (name)
-            {
-                case "style" when value is string css:
-                    inline = css;
-                    break;
-                case "focusable":
-                    Focusable = IsTrue(value);
-                    break;
-                case "cursor":
-                    Cursor = ParseCursor(value);
-                    break;
-                case "class":
-                case "id":
-                case "paint":
-                case "key":
-                    break;
-                default:
-                    if (StyleParser.IsStyleAttribute(name)) style = StyleParser.Apply(style, name, value);
-                    break;
-            }
-        }
-        if (inline is not null) style = StyleParser.ApplyInline(style, inline);
-        return style;
     }
 
     private void RestyleAnonymousText()
@@ -359,25 +365,26 @@ public sealed class HostElement : HostNode
     private IEnumerable<AnonymousTextNode> AnonymousTextChildren() =>
         _layoutChildren?.OfType<AnonymousTextNode>() ?? [];
 
-    /// <summary>
-    /// The colour and flags a text directly under this element would inherit:
-    /// the nearest colour set here or above, and every flag.
-    /// </summary>
-    internal (Color Color, TextStyle Flags) InheritedText()
+    /// <summary>Reads the attributes that are not CSS into their properties.</summary>
+    private void ReadAttributes()
     {
-        var color = Color.Default;
-        var flags = TextStyle.None;
-        for (var element = this; element is not null; element = element.Parent?.ClosestElement)
-        {
-            var style = element.Node.Style;
-            if (color.Kind == ColorKind.Default && style.Color.Kind != ColorKind.Default)
-            {
-                color = style.Color;
-            }
-            flags |= style.TextStyle;
-        }
-        return (color, flags);
+        Id = _attributes.TryGetValue("id", out var id) ? id?.ToString() : null;
+        Classes = _attributes.TryGetValue("class", out var classes) ? ParseClasses(classes) : NoClasses;
+        InlineStyle = _attributes.TryGetValue("style", out var style) && style is string { Length: > 0 } css ? css : null;
+        var tabIndex = _attributes.TryGetValue("tabindex", out var tab) ? ParseTabIndex(tab) : null;
+        Focusable = tabIndex is not null;
+        Tabbable = tabIndex is >= 0;
+        Caret = _attributes.TryGetValue("caret", out var caret) ? ParseCaret(caret) : null;
     }
+
+    private static int? ParseTabIndex(object? value) => value switch
+    {
+        int index => index,
+        true => 0,
+        false or null => null,
+        string text => int.TryParse(text, out var index) ? index : 0,
+        _ => 0,
+    };
 
     private static IReadOnlySet<string> ParseClasses(object? value)
     {
@@ -396,14 +403,7 @@ public sealed class HostElement : HostNode
         }
     }
 
-    private static bool IsTrue(object? value) => value switch
-    {
-        bool flag => flag,
-        string text => !string.Equals(text, "false", StringComparison.OrdinalIgnoreCase),
-        _ => false,
-    };
-
-    private static (int, int)? ParseCursor(object? value)
+    private static (int, int)? ParseCaret(object? value)
     {
         switch (value)
         {
@@ -437,13 +437,12 @@ public sealed class HostElement : HostNode
         }
         _runs = null;
         Node.InvalidateLayout();
-        if (IsInlineText) Parent?.ClosestElement?.DescendantsChanged(structural);
+        if (IsInline) Parent?.ClosestElement?.DescendantsChanged(structural);
     }
 
     /// <summary>
-    /// Descendant elements with containers flattened out. Bare text and inline
-    /// tags between them are grouped into anonymous text leaves, as CSS wraps
-    /// the text in a block in anonymous boxes.
+    /// Descendant boxes with containers flattened out. Text and inline
+    /// elements between them are grouped into anonymous text leaves.
     /// </summary>
     internal IReadOnlyList<LayoutNode> LayoutChildren
     {
@@ -451,7 +450,7 @@ public sealed class HostElement : HostNode
         {
             if (_layoutChildren is not null) return _layoutChildren;
             var children = new List<LayoutNode>();
-            if (!IsText && !IsCanvas && !IsImage)
+            if (!IsInline && !IsCanvas && !IsImage)
             {
                 var inlineRun = new List<HostNode>();
                 Collect(this, children, inlineRun);
@@ -469,6 +468,8 @@ public sealed class HostElement : HostNode
         {
             switch (child)
             {
+                case HostElement { Node.Style.Display: Display.None }:
+                    break;
                 case HostElement { IsInline: true } inline:
                     inlineRun.Add(inline);
                     break;
@@ -477,7 +478,7 @@ public sealed class HostElement : HostNode
                     into.Add(element.Node);
                     break;
                 case HostTextNode text:
-                    if (text.Text.Length > 0 && !IsMarkupWhitespace(text.Text)) inlineRun.Add(text);
+                    inlineRun.Add(text);
                     break;
                 case HostContainer container:
                     Collect(container, into, inlineRun);
@@ -486,32 +487,43 @@ public sealed class HostElement : HostNode
         }
     }
 
-    /// <summary>Turns the pending inline run into an anonymous text leaf, unless it is only spaces.</summary>
+    /// <summary>
+    /// Turns the pending inline run into an anonymous text leaf, unless it is
+    /// only the whitespace that formats the markup.
+    /// </summary>
     private void EndInlineRun(List<LayoutNode> into, List<HostNode> inlineRun)
     {
         if (inlineRun.Count == 0) return;
-        var hasContent = inlineRun.Any(part => part is HostElement || part is HostTextNode { Text: var text } && !string.IsNullOrWhiteSpace(text));
+        var keepsWhitespace = Node.Style.WhiteSpace is WhiteSpace.Pre or WhiteSpace.PreWrap;
+        var hasContent = inlineRun.Any(part => part switch
+        {
+            HostElement => true,
+            HostTextNode { Text: var text } => keepsWhitespace ? text.Length > 0 : !string.IsNullOrWhiteSpace(text),
+            _ => false,
+        });
         if (hasContent) into.Add(new AnonymousTextNode(this, [.. inlineRun]));
         inlineRun.Clear();
     }
 
-    /// <summary>The styled runs of a text leaf.</summary>
+    /// <summary>The styled runs of this element's content, whitespace processed by its <c>white-space</c>.</summary>
     public IReadOnlyList<TextRun> Runs
     {
         get
         {
             if (_runs is not null) return _runs;
             var runs = new List<TextRun>();
-            if (IsText) CollectRuns(this, Node.Style.Color, Node.Style.Background, Node.Style.TextStyle, runs);
+            var style = Node.Style;
+            CollectRuns(Children, style.Color, Color.Default, style.TextStyle, runs);
+            TextLayout.CollapseWhitespace(runs, style.WhiteSpace);
             _runs = runs;
             return runs;
         }
     }
 
-    private static void CollectRuns(HostNode node, Color fg, Color bg, TextStyle style, List<TextRun> into) =>
-        CollectRuns(node.Children, fg, bg, style, into);
-
-    /// <summary>The runs of text nodes and inline elements, each inline element in its own look.</summary>
+    /// <summary>
+    /// The raw runs of text nodes and inline elements, each inline element in
+    /// its own look. Boxes inside the run are skipped; the box above arranges them.
+    /// </summary>
     internal static void CollectRuns(IEnumerable<HostNode> nodes, Color fg, Color bg, TextStyle style, List<TextRun> into)
     {
         foreach (var child in nodes)
@@ -519,53 +531,28 @@ public sealed class HostElement : HostNode
             switch (child)
             {
                 case HostTextNode text:
-                    if (text.Text.Length > 0 && !IsMarkupWhitespace(text.Text))
-                    {
-                        into.Add(new TextRun(text.Text, fg, bg, style));
-                    }
+                    if (text.Text.Length > 0) into.Add(new TextRun(text.Text, fg, bg, style));
                     break;
-                case HostElement { IsText: true } inline when inline.IsBreak || inline.Attributes.ContainsKey("newline"):
-                    into.Add(new TextRun("\n", fg, bg, style));
+                case HostElement { Node.Style.Display: Display.None }:
                     break;
-                case HostElement { IsText: true } inline:
+                case HostElement { IsBreak: true }:
+                    into.Add(TextRun.LineBreak(fg, bg, style));
+                    break;
+                case HostElement { IsInline: true } inline:
                     var inlineStyle = inline.Node.Style;
-                    var inlineFg = inlineStyle.Color.Kind == ColorKind.Default ? fg : inlineStyle.Color;
                     var inlineBg = inlineStyle.Background.Kind == ColorKind.Default ? bg : inlineStyle.Background;
-                    CollectRuns(inline, inlineFg, inlineBg, style | inlineStyle.TextStyle, into);
+                    CollectRuns(inline.Children, inlineStyle.Color, inlineBg, inlineStyle.TextStyle, into);
                     break;
                 case HostContainer container:
-                    CollectRuns(container, fg, bg, style, into);
+                    CollectRuns(container.Children, fg, bg, style, into);
                     break;
             }
         }
     }
 
-    /// <summary>Whitespace containing a line break: the indentation between elements on separate lines.</summary>
-    private static bool IsMarkupWhitespace(string text)
-    {
-        var hasLineBreak = false;
-        foreach (var c in text)
-        {
-            if (c is '\n' or '\r')
-            {
-                hasLineBreak = true;
-            }
-            else if (!char.IsWhiteSpace(c))
-            {
-                return false;
-            }
-        }
-        return hasLineBreak;
-    }
+    public void Paint(CellBuffer buffer, Rect rect) => Painter?.Invoke(buffer, rect);
 
-    /// <summary>Paints a canvas with the delegate registered under its <c>paint</c> attribute.</summary>
-    public void Paint(CellBuffer buffer, Rect rect)
-    {
-        if (!_attributes.TryGetValue("paint", out var paint) || paint is not string key) return;
-        _canvases?.Resolve(key)?.Invoke(buffer, rect);
-    }
-
-    /// <summary>The deepest element whose rect contains the point, or null.</summary>
+    /// <summary>The deepest box containing the point, or null. Inline runs are hit through their block.</summary>
     public HostElement? HitTest(int x, int y)
     {
         if (Node.Style.Display == Display.None || !Node.Layout.Contains(x, y)) return null;
@@ -598,31 +585,15 @@ public class ElementLayoutNode : LayoutNode
 
     public static ElementLayoutNode For(HostElement element)
     {
-        if (element.IsText) return new TextLayoutNode(element);
         if (element.IsCanvas) return new CanvasLayoutNode(element);
         if (element.IsImage) return new ImageLayoutNode(element);
         return new ElementLayoutNode(element);
     }
 }
 
-/// <summary>A <c>text</c> element's node, measured by wrapping its runs.</summary>
-public sealed class TextLayoutNode : ElementLayoutNode, ITextContent
-{
-    public TextLayoutNode(HostElement element) : base(element) { }
-
-    public override bool IsLeaf => true;
-
-    public IReadOnlyList<TextRun> Runs => Element.Runs;
-
-    public override Size MeasureContent(int? availableWidth, int? availableHeight) =>
-        TextLayout.Measure(Element.Runs, availableWidth, Style.Wrap);
-
-    public override int MinContentWidth() => TextLayout.MinContentWidth(Element.Runs, Style.Wrap);
-}
-
 /// <summary>
-/// The anonymous text leaf CSS creates for bare text and inline tags directly
-/// under a box. It inherits its look from the box, as a text child would.
+/// The anonymous text leaf CSS creates for text and inline elements directly
+/// under a box. Its look is the box's inherited text properties.
 /// </summary>
 public sealed class AnonymousTextNode : LayoutNode, ITextContent
 {
@@ -652,38 +623,11 @@ public sealed class AnonymousTextNode : LayoutNode, ITextContent
         {
             if (_runs is not null) return _runs;
             var runs = new List<TextRun>();
-            HostElement.CollectRuns(_parts, Color.Default, Color.Default, TextStyle.None, runs);
-            TrimEdges(runs);
+            var style = Owner.Node.Style;
+            HostElement.CollectRuns(_parts, style.Color, Color.Default, style.TextStyle, runs);
+            TextLayout.CollapseWhitespace(runs, style.WhiteSpace);
             _runs = runs;
             return runs;
-        }
-    }
-
-    /// <summary>
-    /// Drops the spaces at the edges, as a browser drops the whitespace where
-    /// a block's text meets its blocks. A <c>text</c> element keeps its spaces.
-    /// </summary>
-    private static void TrimEdges(List<TextRun> runs)
-    {
-        while (runs.Count > 0)
-        {
-            var trimmed = runs[0].Text.TrimStart(' ');
-            if (trimmed.Length > 0)
-            {
-                runs[0] = runs[0] with { Text = trimmed };
-                break;
-            }
-            runs.RemoveAt(0);
-        }
-        while (runs.Count > 0)
-        {
-            var trimmed = runs[^1].Text.TrimEnd(' ');
-            if (trimmed.Length > 0)
-            {
-                runs[^1] = runs[^1] with { Text = trimmed };
-                break;
-            }
-            runs.RemoveAt(runs.Count - 1);
         }
     }
 
@@ -698,12 +642,25 @@ public sealed class AnonymousTextNode : LayoutNode, ITextContent
         InvalidateLayout();
     }
 
-    internal void Restyle() => Style = StyleFor(Owner);
+    internal void Restyle()
+    {
+        _runs = null;
+        Style = StyleFor(Owner);
+        InvalidateLayout();
+    }
 
     private static Style StyleFor(HostElement owner)
     {
-        var (color, flags) = owner.InheritedText();
-        return Style.Default with { Color = color, TextStyle = flags, Wrap = owner.Node.Style.Wrap };
+        var style = owner.Node.Style;
+        return Style.Default with
+        {
+            Display = Display.Block,
+            Color = style.Color,
+            TextStyle = style.TextStyle,
+            WhiteSpace = style.WhiteSpace,
+            TextOverflow = style.TextOverflow,
+            TextAlign = style.TextAlign,
+        };
     }
 }
 
@@ -770,7 +727,7 @@ public sealed class ImageLayoutNode : ElementLayoutNode, ICustomPaint
     }
 }
 
-/// <summary>A <c>canvas</c> element's node, painted by a delegate.</summary>
+/// <summary>A <c>canvas</c> element's node, painted by the element's <see cref="HostElement.Painter"/>.</summary>
 public sealed class CanvasLayoutNode : ElementLayoutNode, ICustomPaint
 {
     public CanvasLayoutNode(HostElement element) : base(element) { }
@@ -778,31 +735,4 @@ public sealed class CanvasLayoutNode : ElementLayoutNode, ICustomPaint
     public override bool IsLeaf => true;
 
     public void Paint(CellBuffer buffer, Rect rect) => Element.Paint(buffer, rect);
-}
-
-/// <summary>
-/// Paint delegates for <c>canvas</c> elements, by key. Blazor cannot pass a
-/// delegate as an element attribute, so the element carries the key instead.
-/// </summary>
-public sealed class CanvasRegistry
-{
-    private readonly Dictionary<string, Action<CellBuffer, Rect>> _painters = new(StringComparer.Ordinal);
-    private long _next;
-
-    public string NewKey() => $"canvas-{Interlocked.Increment(ref _next)}";
-
-    public void Register(string key, Action<CellBuffer, Rect> paint)
-    {
-        lock (_painters) _painters[key] = paint;
-    }
-
-    public void Unregister(string key)
-    {
-        lock (_painters) _painters.Remove(key);
-    }
-
-    public Action<CellBuffer, Rect>? Resolve(string key)
-    {
-        lock (_painters) return _painters.GetValueOrDefault(key);
-    }
 }

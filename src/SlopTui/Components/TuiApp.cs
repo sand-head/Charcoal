@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -62,7 +63,6 @@ public sealed class TuiApp
         _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
         Services.AddSingleton(this);
         Services.AddSingleton(_terminal);
-        Services.AddSingleton(new CanvasRegistry());
         Services.AddSingleton(Graphics);
     }
 
@@ -77,6 +77,74 @@ public sealed class TuiApp
 
     /// <summary>Parses CSS and adds it as the last stylesheet.</summary>
     public Stylesheet AddStylesheet(string css) => _styles.Sheets.Add(css);
+
+    /// <summary>
+    /// Whether to load, before the first frame, the component-scoped
+    /// stylesheets the build embedded in the app's assemblies.
+    /// </summary>
+    public bool ScopedStylesheets { get; set; } = true;
+
+    /// <summary>
+    /// Adds the scoped stylesheet bundle the build embedded in an assembly
+    /// from its <c>.razor.css</c> files. Returns null when there is none.
+    /// </summary>
+    public Stylesheet? AddScopedStylesheets(Assembly assembly)
+    {
+        var name = assembly.GetManifestResourceNames().FirstOrDefault(n => n.EndsWith(".bundle.scp.css", StringComparison.Ordinal));
+        if (name is null) return null;
+
+        using var stream = assembly.GetManifestResourceStream(name);
+        if (stream is null) return null;
+        using var reader = new StreamReader(stream);
+        return _styles.Sheets.Add(reader.ReadToEnd());
+    }
+
+    /// <summary>
+    /// Loads the scoped sheets of every non-framework assembly the app uses,
+    /// dependencies first, so the app's own sheet wins ties.
+    /// </summary>
+    private void LoadScopedStylesheets()
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var ordered = new List<Assembly>();
+        void Visit(Assembly assembly)
+        {
+            var name = assembly.GetName().Name ?? "";
+            if (assembly.IsDynamic || IsFrameworkAssembly(name) || !seen.Add(name)) return;
+            foreach (var reference in assembly.GetReferencedAssemblies())
+            {
+                if (TryLoad(reference) is { } loaded) Visit(loaded);
+            }
+            ordered.Add(assembly);
+        }
+
+        if (Assembly.GetEntryAssembly() is { } entry) Visit(entry);
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            Visit(assembly);
+        }
+        foreach (var assembly in ordered)
+        {
+            AddScopedStylesheets(assembly);
+        }
+    }
+
+    private static bool IsFrameworkAssembly(string name) =>
+        name.StartsWith("System", StringComparison.Ordinal)
+        || name.StartsWith("Microsoft.", StringComparison.Ordinal)
+        || name is "mscorlib" or "netstandard" or "WindowsBase";
+
+    private static Assembly? TryLoad(AssemblyName name)
+    {
+        try
+        {
+            return Assembly.Load(name);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or FileLoadException or BadImageFormatException)
+        {
+            return null;
+        }
+    }
 
     public FocusManager Focus => _focus ?? throw new InvalidOperationException("The app is not running.");
 
@@ -145,6 +213,7 @@ public sealed class TuiApp
     public int Run(Type rootComponent, IReadOnlyDictionary<string, object?>? parameters = null)
     {
         _dispatcher.BindToCurrentThread();
+        if (ScopedStylesheets) LoadScopedStylesheets();
         var provider = Services.BuildServiceProvider();
         _renderer = new TerminalRenderer(provider, _loggerFactory, _dispatcher, OnException, _styles);
         _focus = new FocusManager(_renderer.Root, NotifyFocusAsync, work => _dispatcher.Post(work), _styles);
@@ -308,7 +377,7 @@ public sealed class TuiApp
     {
         // Only the focused element's caret is shown.
         var owner = _focus!.Focused;
-        if (owner?.Cursor is not { } caret || owner.Node.Layout.IsEmpty)
+        if (owner?.Caret is not { } caret || owner.Node.Layout.IsEmpty)
         {
             _screen!.CursorVisible = false;
             _screen.Cursor = null;

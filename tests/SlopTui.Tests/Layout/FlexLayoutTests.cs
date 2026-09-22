@@ -4,8 +4,8 @@ namespace SlopTui.Tests.Layout;
 
 public class FlexLayoutTests
 {
-    private static readonly Style Row = new() { FlexDirection = FlexDirection.Row };
-    private static readonly Style Column = new() { FlexDirection = FlexDirection.Column };
+    private static readonly Style Row = new() { Display = Display.Flex, FlexDirection = FlexDirection.Row };
+    private static readonly Style Column = new() { Display = Display.Flex, FlexDirection = FlexDirection.Column };
 
     private static TextLeafNode Leaf(int width, int height, Style? style = null) => new(width, height, style);
 
@@ -200,7 +200,7 @@ public class FlexLayoutTests
     [Fact]
     public void A_border_insets_by_one_on_each_drawn_side()
     {
-        var root = new BoxNode(Column with { Border = BorderStyle.Single, BorderLeft = false }, Leaf(5, 1));
+        var root = new BoxNode(Column with { BorderStyle = BorderStyle.Solid, BorderLeftStyle = BorderStyle.None }, Leaf(5, 1));
         Lay(root, 40, 10);
         Assert.Equal(new Rect(0, 1, 39, 1), root.Children[0].Layout);
     }
@@ -307,7 +307,7 @@ public class FlexLayoutTests
     [Fact]
     public void Absolute_children_leave_the_flow_and_sit_at_their_offsets_in_the_padding_box()
     {
-        var root = new BoxNode(Row with { Border = BorderStyle.Single, Padding = new Edges(1) },
+        var root = new BoxNode(Row with { BorderStyle = BorderStyle.Solid, Padding = new Edges(1) },
             Leaf(5, 1, new Style { Position = Position.Absolute, Top = 2, Left = 3, Width = 4, Height = 2 }),
             Leaf(5, 1));
         Lay(root, 40, 10);
@@ -469,7 +469,7 @@ public class FlexLayoutTests
     [Fact]
     public void Measure_of_a_box_includes_its_inset()
     {
-        var box = new BoxNode(Row with { Padding = new Edges(1), Border = BorderStyle.Single }, Leaf(6, 2));
+        var box = new BoxNode(Row with { Padding = new Edges(1), BorderStyle = BorderStyle.Solid }, Leaf(6, 2));
         Assert.Equal(new Size(10, 6), FlexLayout.Measure(box, null, null));
     }
 
@@ -547,7 +547,7 @@ public class FlexLayoutTests
         // Three items of height 2, shrink 0, in a column of height 3: the last
         // item ends at the container's bottom and the first overflows the top.
         var item = new Style { FlexShrink = 0 };
-        var column = new BoxNode(new Style { FlexDirection = FlexDirection.Column, JustifyContent = JustifyContent.FlexEnd },
+        var column = new BoxNode(new Style { Display = Display.Flex, FlexDirection = FlexDirection.Column, JustifyContent = JustifyContent.FlexEnd },
             new TextLeafNode(5, 2, item), new TextLeafNode(5, 2, item), new TextLeafNode(5, 2, item));
 
         FlexLayout.Layout(column, new Size(10, 3));
@@ -562,7 +562,7 @@ public class FlexLayoutTests
     public void Overflowing_content_with_justify_center_overflows_both_ways()
     {
         var item = new Style { FlexShrink = 0 };
-        var column = new BoxNode(new Style { FlexDirection = FlexDirection.Column, JustifyContent = JustifyContent.Center },
+        var column = new BoxNode(new Style { Display = Display.Flex, FlexDirection = FlexDirection.Column, JustifyContent = JustifyContent.Center },
             new TextLeafNode(5, 4, item), new TextLeafNode(5, 4, item));
 
         FlexLayout.Layout(column, new Size(10, 4));

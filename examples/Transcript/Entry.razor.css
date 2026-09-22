@@ -1,0 +1,5 @@
+.entry { display: flex; gap: 1 }
+.who { opacity: 0.5; white-space: pre }
+.you { color: cyan }
+.agent { color: green }
+.text { flex: 1 }

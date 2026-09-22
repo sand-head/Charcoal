@@ -1,19 +1,17 @@
 # sloptui
 
-A component-style terminal UI library for .NET. Write `.razor` components,
-lay them out with flexbox, and get a cell-diffed terminal frame out. Blazor's
-own renderer reconciles the components; everything after the render tree is
-this library.
+A component-style terminal UI library for .NET. Write `.razor` components
+with HTML elements and CSS, and get a cell-diffed terminal frame out.
+Blazor's own renderer reconciles the components; everything after the
+render tree is this library.
 
 ```razor
 @inject TuiApp App
 
-<Box FlexDirection="FlexDirection.Column" Padding="new Edges(1, 2)" focusable="true" @onkeypress="OnKey">
-    <Box Border="BorderStyle.Round" BorderColor="Color.Cyan" Padding="new Edges(0, 1)">
-        <Text Bold="true" Color="Color.Green">Hello from sloptui</Text>
-    </Box>
-    <Text Dim="true">Press q to quit.</Text>
-</Box>
+<div class="app" tabindex="0" @onkeypress="OnKey">
+    <div class="banner">Hello from sloptui</div>
+    <p class="muted">Press q to quit.</p>
+</div>
 
 @code {
     private void OnKey(KeyPressEventArgs e)
@@ -25,6 +23,13 @@ this library.
 }
 ```
 
+```css
+/* App.razor.css, scoped to App's elements as on the web */
+.app { padding: 1 2; height: 100% }
+.banner { width: fit-content; border: solid cyan; border-radius: 1; padding: 0 1; color: green; font-weight: bold }
+.muted { opacity: 0.5 }
+```
+
 ```csharp
 return new TuiApp().Run<App>();
 ```
@@ -34,47 +39,60 @@ return new TuiApp().Run<App>();
 
 ## What you get
 
-- **Razor components.** `Box`, `Text`, `Canvas`, `Spacer`, `Newline`, or the
-  bare `<box>` and `<canvas>` elements with kebab-case attributes. Razor
-  reserves `<text>` inside code blocks such as `@if` and `@foreach`, so use
-  `<Run>`, the same component, there. HTML inline tags work inside a text:
-  `<strong>`/`<b>` bold, `<em>`/`<i>` italic, `<u>`, `<s>`/`<del>`, `<mark>`
-  (inverse), `<span>` and `<br>`. Sheets and attributes override the tag,
-  so `<strong bold="false">` is plain. Bare text under a box needs no
-  `Text`: it becomes an anonymous text leaf, as in a CSS block. `<div>`,
-  `<p>`, `<section>`, `<h1>` and the other block tags are boxes whose
-  children stack, where a `<box>` is a row; headings are bold.
-- **Pictures.** `<img src="logo.png" width="24" />`, or the `Image`
-  component, decodes PNG, JPEG, GIF, BMP, TGA and PSD without a native
-  library. Terminals with the kitty graphics protocol (kitty, WezTerm,
-  Ghostty, Konsole) show it at full resolution, and it still clips and
-  scrolls like text; elsewhere it is drawn as half blocks in truecolour.
-  Given one side, the other follows the image's shape; given neither, it
-  shrinks to fit. Sizes use the terminal's reported cell size. `alt` shows
-  when the source does not decode.
-  Parameters, `@key`, `EventCallback`, cascading values, `@inject`,
-  `StateHasChanged` and `InvokeAsync` work as they do on the web.
+- **HTML elements.** `div`, `p`, `span`, `strong`, `em`, `h1`–`h6`,
+  `ul`/`li`, `pre`, `img`, `canvas`, `br`, `hr` and the rest, with a
+  user-agent stylesheet that gives them their usual look: blocks stack,
+  `strong` is bold, `em` italic, `mark` highlighted, `pre` keeps its
+  whitespace, and paragraphs have a blank line around them. Bare text
+  under a block needs no component.
+- **CSS, in cells.** `style="…"`, `class` and stylesheets go through one
+  cascade: the user-agent sheet, then the app's sheets by specificity and
+  order, then the inline style. Supported: `display: block | flex | grid |
+  inline | none`; the flex and grid properties; sizes in cells, `%` or
+  `fit-content`; `padding` and `margin` with the logical longhands and
+  collapsing block margins; `gap`, `overflow`, `position: absolute`,
+  `visibility`; `border` with `solid`, `double`, `dashed`, rounded corners
+  from `border-radius` and heavy lines from `border-width: thick`; `color`,
+  `background`, `font-weight`, `font-style`, `text-decoration`, `opacity`
+  (dim), `filter: invert()` (inverse), `white-space`, `text-overflow`,
+  `text-align`; custom properties with `var()`; `:focus`, `:focus-within`,
+  `:root`, `:first-child`, `:last-child`, attribute selectors, and the
+  descendant and child combinators. Colours are CSS names (the sixteen
+  basic ones follow the terminal's palette), `#rrggbb` or `rgb()`.
+  Properties a terminal cannot draw, such as `font-family`, are ignored, so
+  a page's stylesheet still loads.
+- **Component-scoped stylesheets.** A `Component.razor.css` beside a
+  component is scoped to it exactly as Blazor does on the web, `::deep`
+  included. The build embeds the bundle in the assembly and `TuiApp` loads
+  it, and every referenced library's, before the first frame.
+  `app.AddStylesheet(css)` adds a global sheet.
+- **Pictures.** `<img src="logo.png" width="24" />` decodes PNG, JPEG, GIF,
+  BMP, TGA and PSD without a native library. Terminals with the kitty
+  graphics protocol (kitty, WezTerm, Ghostty, Konsole) show it at full
+  resolution, and it still clips and scrolls like text; elsewhere it is
+  drawn as half blocks in truecolour. Given one side, the other follows the
+  image's shape; given neither, it shrinks to fit. `alt` shows when the
+  source does not decode.
+- **Blazor.** Parameters, `@key`, `@ref`, `EventCallback`, cascading values,
+  `@inject`, `StateHasChanged` and `InvokeAsync` work as they do on the web.
 - **Flexbox and grid on cells.** Direction, wrap, justify, align (items,
   self, content), grow/shrink/basis, percent and auto sizes, min/max with
-  CSS's content-based automatic minimum, padding, margin, gap, borders,
-  absolute positioning and `display: none`. `display: grid` supports track
-  templates such as `12 1fr auto 25%` and `repeat(3, 1fr)`, explicit
-  placement and spans, auto-placement, gaps and per-cell alignment. Layout
-  is cached per node, so a frame only re-measures what changed.
-- **Scrolling.** `overflow: scroll` with `scroll-x` and `scroll-y`, and a
-  `ScrollBox` component that handles the keyboard and the wheel, binds
-  `ScrollTop`, and can stick to the bottom as content grows.
-- **Stylesheets.** `app.AddStylesheet(css)` supports type, class, id,
-  `:focus` and `:focus-within` selectors, descendant and child combinators,
-  specificity and source order. Inline attributes win, and colour and text
-  flags inherit into nested text.
+  CSS's content-based automatic minimum, borders and absolute positioning.
+  `display: grid` supports track templates such as `12 1fr auto 25%` and
+  `repeat(3, 1fr)`, explicit placement and spans, auto-placement, gaps and
+  per-cell alignment. Layout is cached per node, so a frame only
+  re-measures what changed.
+- **Scrolling.** `overflow: auto` on any element, with its `ScrollTop`
+  reachable through `@ref`, and a `ScrollBox` component that handles the
+  keyboard and the wheel, binds `ScrollTop`, and can stick to the bottom as
+  content grows.
 - **Text that measures right.** Grapheme clusters and wcwidth, so CJK and
-  emoji take two cells and combining marks take none. Wrap, truncate at the
-  end, start or middle, or clip.
-- **Events.** `@onkeypress`, `@onclick`, `@onmouse`, `@onfocus`, `@onblur`,
-  `@onpaste`. Keys go to the focused element and bubble; `focusable="true"`
-  joins the Tab order; a left click focuses. `cursor="col,row"` on an
-  element puts the terminal's cursor there.
+  emoji take two cells and combining marks take none. `white-space` decides
+  wrapping and collapsing, and `text-overflow` decides the cut.
+- **Events.** `@onkeypress`, `@onclick`, `@onmouse`, `@onfocus`, `@onblur`
+  and `@onpaste`. Keys go to the focused element and bubble up.
+  `tabindex="0"` joins the Tab order, `tabindex="-1"` is focusable by click
+  only. `caret="col,row"` on a focused element places the terminal's cursor.
 - **A frame is one write.** The screen is double-buffered and only changed
   spans are repainted, inside synchronized output. A streaming transcript of
   ten thousand lines paints in a few milliseconds.
@@ -87,10 +105,10 @@ Each one under `examples/` is a runnable project:
 
 | Example | Shows |
 |---|---|
-| `Hello` | The smallest app. |
-| `Layouts` | A gallery of the layout subset, page by page: flex, wrap, grid, automatic minimums, scrolling. |
-| `Styled` | Cards styled by a stylesheet: classes, ids, `:focus`, inheritance, inline overrides. |
-| `Counter` | State, focus, a timer, key and mouse handlers. |
+| `Hello` | The smallest app: HTML tags, a scoped stylesheet, a picture. |
+| `Layouts` | A gallery of the layout subset, page by page: flex, wrap, grid, automatic minimums, scrolling; one `.razor` and one `.razor.css` per page. |
+| `Styled` | Cards styled by a global stylesheet: classes, ids, `:focus`, custom properties, inheritance, inline overrides. |
+| `Counter` | State, `:focus` from a scoped sheet, a timer, key and mouse handlers. |
 | `Picker` | A list with keyboard and mouse selection, rows that skip unchanged renders. |
 | `Transcript` | A streaming, bottom-anchored transcript with a composer, entirely in components; `--bench` prints frame costs for 10,000 lines headless. |
 
@@ -115,7 +133,8 @@ Packages are published to GitHub Packages on each merge to `main` (pre-1.0):
 dotnet add package SlopTui
 ```
 
-An app project uses the Razor SDK so its `.razor` files compile:
+An app project uses the Razor SDK, so its `.razor` files compile and its
+`.razor.css` files are scoped and bundled:
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk.Razor">
@@ -135,13 +154,19 @@ with an `_Imports.razor` of `@using SlopTui.Components`, `@using SlopTui.Layout`
 ## How it is put together
 
 ```
-.razor components → Blazor Renderer → host tree → FlexLayout → Painter → Screen.Flush() → one write
+.razor components → Blazor Renderer → host tree → cascade → block/flex/grid layout → Painter → Screen.Flush() → one write
 terminal input thread → AnsiKeyParser → InputPump → focus + bubbling → @onkeypress …
 ```
 
 `TuiApp.Run` owns one thread: it is the Blazor dispatcher, the input router
 and the painter. Code on other threads reaches it with `InvokeAsync`, as on
 the web. See [docs/design.md](docs/design.md) for details.
+
+## Not yet supported
+
+Sixel and iTerm2 inline images; `!important`; `@media`; pseudo-elements;
+`margin: auto` centring; horizontal scrolling in `ScrollBox`; list markers;
+and clicks on inline elements, which go to the block that holds them.
 
 ## Building
 

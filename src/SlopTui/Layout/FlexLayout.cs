@@ -1,9 +1,9 @@
 namespace SlopTui.Layout;
 
 /// <summary>
-/// Flexbox, and grid through <see cref="GridLayout"/>, on integer cells, as a
-/// cached measure pass and an arrange pass. Each node's rect is its border
-/// box in absolute terminal cells.
+/// Block, flex and (through <see cref="GridLayout"/>) grid layout on integer
+/// cells, as a cached measure pass and an arrange pass. Each node's rect is
+/// its border box in absolute terminal cells.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -95,8 +95,132 @@ public static class FlexLayout
     private static Size MeasureContentBox(LayoutNode node, int? innerWidth, int? innerHeight)
     {
         if (node.IsLeaf) return node.MeasureContent(innerWidth, innerHeight);
-        if (node.Style.Display == Display.Grid) return GridLayout.MeasureContent(node, innerWidth, innerHeight);
-        return MeasureChildren(node, innerWidth, innerHeight);
+        return node.Style.Display switch
+        {
+            Display.Grid => GridLayout.MeasureContent(node, innerWidth, innerHeight),
+            Display.Flex => MeasureChildren(node, innerWidth, innerHeight),
+            _ => MeasureBlock(node, innerWidth, innerHeight),
+        };
+    }
+
+    /// <summary>Whether the node stacks its children as blocks, which is anything but flex or grid.</summary>
+    internal static bool IsBlock(Style style) => style.Display is not (Display.Flex or Display.Grid);
+
+    /// <summary>
+    /// A block container's content size: its children stacked, with adjoining
+    /// vertical margins collapsed to the larger one, as in CSS.
+    /// </summary>
+    /// <remarks>
+    /// When nothing separates the first or last child's margin from the
+    /// container's edge and the parent is a block too, that margin collapses
+    /// through: it is reported in <see cref="LayoutNode.MarginTopThrough"/> and
+    /// <see cref="LayoutNode.MarginBottomThrough"/> for the parent to apply.
+    /// </remarks>
+    private static Size MeasureBlock(LayoutNode node, int? innerWidth, int? innerHeight)
+    {
+        var style = node.Style;
+        var marginsEscape = MarginsCollapseThrough(node);
+        var width = 0;
+        var y = 0;
+        int? previousBottom = null;
+        var throughTop = 0;
+
+        foreach (var child in InFlowChildren(node))
+        {
+            var margin = child.Style.Margin;
+            var availW = Inner(innerWidth, margin.Horizontal);
+            // A percentage height resolves only against a definite container height.
+            var availH = style.Height.IsAuto ? null : Inner(innerHeight, margin.Vertical);
+            var size = Measure(child, availW, availH);
+            var (top, bottom) = CollapsedMargins(child);
+
+            if (previousBottom is { } above)
+            {
+                y += Math.Max(above, top);
+            }
+            else if (marginsEscape && style.Inset.Top == 0)
+            {
+                throughTop = top;
+            }
+            else
+            {
+                y += top;
+            }
+
+            y += size.Height;
+            previousBottom = bottom;
+            width = Math.Max(width, size.Width + margin.Horizontal);
+        }
+
+        var throughBottom = 0;
+        if (previousBottom is { } last)
+        {
+            if (BottomMarginEscapes(node, marginsEscape))
+            {
+                throughBottom = last;
+            }
+            else
+            {
+                y += last;
+            }
+        }
+        node.MarginTopThrough = throughTop;
+        node.MarginBottomThrough = throughBottom;
+        return new Size(width, y);
+    }
+
+    /// <summary>Places a block container's children as <see cref="MeasureBlock"/> stacked them.</summary>
+    private static void ArrangeBlock(LayoutNode node, Rect content, Rect visible)
+    {
+        var style = node.Style;
+        var marginsEscape = MarginsCollapseThrough(node);
+        var (scrollX, scrollY) = ScrollOffset(node);
+        var width = 0;
+        var y = 0;
+        int? previousBottom = null;
+
+        foreach (var child in InFlowChildren(node))
+        {
+            var cs = child.Style;
+            var margin = cs.Margin;
+            var availW = Math.Max(0, content.Width - margin.Horizontal);
+            var availH = style.Height.IsAuto ? (int?)null : Math.Max(0, content.Height - margin.Vertical);
+            var size = Measure(child, availW, availH);
+            var childWidth = cs.Width.IsAuto ? availW : size.Width;
+            var (top, bottom) = CollapsedMargins(child);
+
+            if (previousBottom is { } above)
+            {
+                y += Math.Max(above, top);
+            }
+            else if (!(marginsEscape && style.Inset.Top == 0))
+            {
+                y += top;
+            }
+
+            var rect = new Rect(content.X + margin.Left - scrollX, content.Y + y - scrollY, childWidth, size.Height);
+            ArrangeChild(node, child, rect, visible);
+            y += size.Height;
+            previousBottom = bottom;
+            width = Math.Max(width, childWidth + margin.Horizontal);
+        }
+
+        if (previousBottom is { } last && !BottomMarginEscapes(node, marginsEscape)) y += last;
+        node.ContentSize = new Size(width, y);
+    }
+
+    /// <summary>Whether margins can collapse through this node into its parent, which must be a block.</summary>
+    private static bool MarginsCollapseThrough(LayoutNode node) =>
+        node.LayoutParent is { } parent && IsBlock(parent.Style) && parent.Style.Display != Display.None;
+
+    private static bool BottomMarginEscapes(LayoutNode node, bool marginsEscape) =>
+        marginsEscape && node.Style.Inset.Bottom == 0 && node.Style.Height.IsAuto;
+
+    /// <summary>A child's vertical margins, including those collapsed through it from its own children.</summary>
+    private static (int Top, int Bottom) CollapsedMargins(LayoutNode child)
+    {
+        var margin = child.Style.Margin;
+        return (Math.Max(margin.Top, child.MarginTopThrough), Math.Max(margin.Bottom, child.MarginBottomThrough));
     }
 
     /// <summary>
@@ -234,7 +358,7 @@ public static class FlexLayout
         if (!widthAxis && (node.IsLeaf || style.Display == Display.Grid)) return Measure(node, availW, null).Height;
         if (style.Display == Display.Grid && !node.IsLeaf) return GridLayout.MinContentWidth(node);
 
-        var content = node.IsLeaf ? node.MinContentWidth() : FlexAutomaticMinimum(node, widthAxis, availW, availH);
+        var content = node.IsLeaf ? node.MinContentWidth() : ChildrenAutomaticMinimum(node, widthAxis, availW, availH);
         content += widthAxis ? style.Inset.Horizontal : style.Inset.Vertical;
         content = Clamp(content,
             (widthAxis ? style.MinWidth : style.MinHeight).Resolve(availOwn),
@@ -243,14 +367,16 @@ public static class FlexLayout
     }
 
     /// <summary>
-    /// The children's minimums side by side on the main axis, or the largest
-    /// of them across or when the box wraps, since wrapped items can move to
-    /// another line.
+    /// A container's children's minimums side by side along its main axis,
+    /// or the largest of them across it or when it wraps.
     /// </summary>
-    private static int FlexAutomaticMinimum(LayoutNode node, bool widthAxis, int? availW, int? availH)
+    private static int ChildrenAutomaticMinimum(LayoutNode node, bool widthAxis, int? availW, int? availH)
     {
         var style = node.Style;
-        var sideBySide = IsRow(style.FlexDirection) == widthAxis && style.FlexWrap == FlexWrap.NoWrap;
+        var isFlex = style.Display == Display.Flex;
+        // A block stacks its children like a column; a wrapping row only needs its widest child.
+        var row = isFlex && IsRow(style.FlexDirection);
+        var sideBySide = row == widthAxis && (!isFlex || style.FlexWrap == FlexWrap.NoWrap);
         // Children are measured within the box's own explicit size, not the room around it.
         var innerW = Inner(style.Width.Resolve(availW) ?? availW, style.Inset.Horizontal);
         var innerH = Inner(style.Height.Resolve(availH) ?? availH, style.Inset.Vertical);
@@ -269,7 +395,7 @@ public static class FlexLayout
         }
 
         if (!sideBySide) return largest;
-        var gap = widthAxis ? style.ColumnGap : style.RowGap;
+        var gap = isFlex ? (widthAxis ? style.ColumnGap : style.RowGap) : 0;
         return sum + (count > 1 ? gap * (count - 1) : 0);
     }
 
@@ -312,13 +438,17 @@ public static class FlexLayout
         var paddingBox = rect.Deflate(style.BorderEdges);
         var childVisible = style.Overflow == Overflow.Visible ? visible : visible.Intersect(paddingBox);
 
-        if (style.Display == Display.Grid)
+        switch (style.Display)
         {
-            GridLayout.Arrange(node, content, childVisible);
-        }
-        else
-        {
-            ArrangeFlow(node, content, childVisible);
+            case Display.Grid:
+                GridLayout.Arrange(node, content, childVisible);
+                break;
+            case Display.Flex:
+                ArrangeFlow(node, content, childVisible);
+                break;
+            default:
+                ArrangeBlock(node, content, childVisible);
+                break;
         }
 
         foreach (var child in node.Children)
@@ -355,10 +485,10 @@ public static class FlexLayout
     }
 
     /// <summary>How far a clipping box scrolls its in-flow children.</summary>
-    internal static (int X, int Y) ScrollOffset(Style style)
+    internal static (int X, int Y) ScrollOffset(LayoutNode node)
     {
-        if (style.Overflow == Overflow.Visible) return (0, 0);
-        return (Math.Max(0, style.ScrollX), Math.Max(0, style.ScrollY));
+        if (node.Style.Overflow == Overflow.Visible) return (0, 0);
+        return (node.ScrollLeft, node.ScrollTop);
     }
 
     private sealed class Item
@@ -479,7 +609,7 @@ public static class FlexLayout
         var mainContent = wrap ? lines.Max(line => MainUsed(line, gap, row)) : MainUsed(lines[0], gap, row);
         node.ContentSize = row ? new Size(mainContent, contentCross) : new Size(contentCross, mainContent);
 
-        var placement = new LinePlacement(node, content, visible, row, mainSize, gap, ScrollOffset(style));
+        var placement = new LinePlacement(node, content, visible, row, mainSize, gap, ScrollOffset(node));
         var crossPosition = crossStart;
         foreach (var l in LineOrder(lines.Count, style.FlexWrap))
         {

@@ -83,7 +83,7 @@ public static class GridLayout
         node.ContentSize = new Size(computed.Width, computed.Height);
 
         var (rowStart, rowBetween) = AlignRows(style, computed, content.Height - computed.Height);
-        var (scrollX, scrollY) = FlexLayout.ScrollOffset(style);
+        var (scrollX, scrollY) = FlexLayout.ScrollOffset(node);
         foreach (var item in computed.Items)
         {
             var area = new Rect(

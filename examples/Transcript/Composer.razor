@@ -1,16 +1,14 @@
-@* A one-line editor. The cursor attribute places the terminal's cursor at the caret. *@
-<Box Border="BorderStyle.Round" BorderColor="@(_focused ? Color.Green : Color.BrightBlack)" Padding="new Edges(0, 1)" Gap="1"
-     focusable="true" cursor="@($"{2 + _caret},0")" @onkeypress="OnKey" @onpaste="OnPaste" @onfocus="() => _focused = true" @onblur="() => _focused = false">
-    <Text Color="Color.Green">❯</Text>
-    <Text FlexGrow="1" Wrap="TextWrap.Clip">@_text</Text>
-</Box>
+@*
+    A one-line editor. The caret attribute places the terminal's cursor, and
+    :focus in the scoped sheet colours the border while it has the keyboard.
+*@
+<div class="composer" tabindex="0" caret="@($"{2 + _caret},0")" @onkeypress="OnKey" @onpaste="OnPaste"><span class="prompt">❯ </span>@_text</div>
 
 @code {
     [Parameter] public EventCallback<string> OnSubmit { get; set; }
 
     private string _text = "";
     private int _caret;
-    private bool _focused;
 
     private async Task OnKey(KeyPressEventArgs e)
     {

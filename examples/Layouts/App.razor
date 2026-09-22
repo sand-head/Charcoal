@@ -1,10 +1,10 @@
 @inject TuiApp Tui
 
-<Box FlexDirection="FlexDirection.Column" FlexGrow="1" @onkeypress="OnKey" focusable="true">
-    <Box Padding="new Edges(0, 1)" Gap="2">
-        <Text Bold="true">sloptui layouts</Text>
-        <Text Dim="true">page @(_page + 1)/@Titles.Length · @Titles[_page] · ← → to browse · q to quit</Text>
-    </Box>
+<div class="app" tabindex="0" @onkeypress="OnKey">
+    <div class="header">
+        <span class="title">sloptui layouts</span>
+        <span class="muted">page @(_page + 1)/@Titles.Length · @Titles[_page] · ← → to browse · q to quit</span>
+    </div>
 
     @switch (_page)
     {
@@ -20,14 +20,12 @@
         default: <ScrollPage /> break;
     }
 
-    <Box Padding="new Edges(0, 1)">
-        <Text Dim="true">every page is Box + Text; the source is one .razor file per page</Text>
-    </Box>
-</Box>
+    <div class="footer muted">every page is HTML elements and a scoped stylesheet; the source is one .razor file per page</div>
+</div>
 
 @code {
     private static readonly string[] Titles =
-        ["row and column", "justify-content", "align-items and stretch", "grow, shrink, basis, percent", "borders, padding, wrapping", "absolute position", "flex-wrap and align-content", "grid", "automatic minimum size", "scrolling"];
+        ["row and column", "justify-content", "align-items and stretch", "grow, shrink, basis, percent", "borders, padding, text-overflow", "absolute position", "flex-wrap and align-content", "grid", "automatic minimum size", "scrolling"];
 
     private int _page;
 

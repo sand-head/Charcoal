@@ -1,8 +1,8 @@
 @* One transcript line, re-rendered only when its text changes. *@
-<Box Gap="1">
-    <Text Dim="true" Color="@(IsUser ? Color.Cyan : Color.Green)">@(IsUser ? "you  " : "agent")</Text>
-    <Text FlexGrow="1" Wrap="TextWrap.Wrap">@Line.Text</Text>
-</Box>
+<div class="entry">
+    <div class="@(IsUser ? "who you" : "who agent")">@(IsUser ? "you  " : "agent")</div>
+    <div class="text">@Line.Text</div>
+</div>
 
 @code {
     [Parameter, EditorRequired] public App.Line Line { get; set; } = default!;

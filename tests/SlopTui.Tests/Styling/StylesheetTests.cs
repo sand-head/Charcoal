@@ -7,10 +7,10 @@ public class StylesheetTests
     [Fact]
     public void A_rule_has_its_selectors_and_declarations_in_order()
     {
-        var sheet = Stylesheet.Parse("box, text.title { padding: 1; color: red } text { bold: true }");
+        var sheet = Stylesheet.Parse("div, p.title { padding: 1; color: red } p { font-weight: bold }");
 
         Assert.Equal(2, sheet.Rules.Count);
-        Assert.Equal(["box", "text.title"], sheet.Rules[0].Selectors.Select(s => s.Text));
+        Assert.Equal(["div", "p.title"], sheet.Rules[0].Selectors.Select(s => s.Text));
         Assert.Equal([("padding", "1"), ("color", "red")], sheet.Rules[0].Declarations.Select(d => (d.Name, d.Value)));
         Assert.Equal(0, sheet.Rules[0].Order);
         Assert.Equal(1, sheet.Rules[1].Order);
@@ -18,21 +18,25 @@ public class StylesheetTests
     }
 
     [Theory]
-    [InlineData("box", "box", 0, 0)]
+    [InlineData("div", "div", 0, 0)]
     [InlineData("*", "*", 0, 0)]
     [InlineData(".a", null, 1, 0)]
     [InlineData("#main", null, 0, 1)]
-    [InlineData("text.a.b", "text", 2, 0)]
-    [InlineData("box#main.a", "box", 1, 1)]
-    [InlineData("box:focus", "box", 1, 0)]
+    [InlineData("p.a.b", "p", 2, 0)]
+    [InlineData("div#main.a", "div", 1, 1)]
+    [InlineData("div:focus", "div", 1, 0)]
     [InlineData(".a:focus-within", null, 2, 0)]
+    [InlineData("[hidden]", null, 1, 0)]
+    [InlineData("div[b-x1y2z3].card", "div", 2, 0)]
+    [InlineData("p:first-child", "p", 1, 0)]
+    [InlineData(":root", null, 1, 0)]
     public void A_compound_selector_reads_its_parts(string text, string? type, int classesAndPseudos, int ids)
     {
         var selector = Selector.Parse(text);
         var compound = Assert.Single(selector.Compounds);
 
         Assert.Equal(type, compound.Type);
-        Assert.Equal(classesAndPseudos, compound.Classes.Count + (compound.Focus ? 1 : 0) + (compound.FocusWithin ? 1 : 0));
+        Assert.Equal(classesAndPseudos, compound.Classes.Count + compound.Attributes.Count + System.Numerics.BitOperations.PopCount((uint)compound.Pseudo));
         Assert.Equal(ids, compound.Id is null ? 0 : 1);
         Assert.Equal(ids * 10_000 + classesAndPseudos * 100 + (type is not null && type != "*" ? 1 : 0), selector.Specificity);
     }
@@ -40,19 +44,19 @@ public class StylesheetTests
     [Fact]
     public void Combinators_are_descendant_for_a_space_and_child_for_an_angle()
     {
-        var selector = Selector.Parse("box .a > text");
+        var selector = Selector.Parse("div .a > p");
 
         Assert.Equal(3, selector.Compounds.Count);
         Assert.Equal(Combinator.None, selector.Compounds[0].Combinator);
         Assert.Equal(Combinator.Descendant, selector.Compounds[1].Combinator);
         Assert.Equal(Combinator.Child, selector.Compounds[2].Combinator);
-        Assert.Equal("box .a > text", selector.Text);
+        Assert.Equal("div .a > p", selector.Text);
     }
 
     [Fact]
     public void An_angle_without_spaces_is_still_a_child_combinator()
     {
-        var selector = Selector.Parse("box>text");
+        var selector = Selector.Parse("div>p");
         Assert.Equal(Combinator.Child, selector.Compounds[1].Combinator);
     }
 
@@ -60,15 +64,16 @@ public class StylesheetTests
     public void Specificity_orders_ids_over_classes_over_types()
     {
         Assert.True(Selector.Parse("#a").Specificity > Selector.Parse(".a.b.c.d").Specificity);
-        Assert.True(Selector.Parse(".a").Specificity > Selector.Parse("box text canvas").Specificity);
-        Assert.Equal(Selector.Parse("box:focus").Specificity, Selector.Parse("box.a").Specificity);
+        Assert.True(Selector.Parse(".a").Specificity > Selector.Parse("div p canvas").Specificity);
+        Assert.Equal(Selector.Parse("div:focus").Specificity, Selector.Parse("div.a").Specificity);
+        Assert.Equal(Selector.Parse("div[x]").Specificity, Selector.Parse("div.a").Specificity);
         Assert.Equal(0, Selector.Parse("*").Specificity);
     }
 
     [Fact]
     public void Comments_are_ignored_and_lines_keep_counting_through_them()
     {
-        var sheet = Stylesheet.Parse("/* the header */\nbox { /* inner */ padding: 1; }\n/* multi\nline */\ntext { color: red }");
+        var sheet = Stylesheet.Parse("/* the header */\ndiv { /* inner */ padding: 1; }\n/* multi\nline */\np { color: red }");
 
         Assert.Equal(2, sheet.Rules.Count);
         Assert.Single(sheet.Rules[0].Declarations);
@@ -77,34 +82,52 @@ public class StylesheetTests
     [Fact]
     public void A_bad_value_names_the_line_the_selector_and_the_property()
     {
-        var ex = Assert.Throws<FormatException>(() => Stylesheet.Parse("box { padding: 1 }\n\ntext.title { color: notacolour }"));
+        var ex = Assert.Throws<FormatException>(() => Stylesheet.Parse("div { padding: 1 }\n\np.title { color: notacolour }"));
 
         Assert.Contains("line 3", ex.Message);
-        Assert.Contains("text.title", ex.Message);
+        Assert.Contains("p.title", ex.Message);
         Assert.Contains("color: notacolour", ex.Message);
     }
 
     [Fact]
-    public void An_unknown_property_is_kept_and_warned_about_not_thrown()
+    public void An_unknown_property_is_kept_and_warned_about_and_a_web_only_one_is_quietly_ignored()
     {
-        var sheet = Stylesheet.Parse("box { font-family: mono; padding: 2 }");
+        var sheet = Stylesheet.Parse("div { bold: true; font-family: mono; padding: 2 }");
 
         var declaration = sheet.Rules[0].Declarations[0];
         Assert.False(declaration.Known);
-        Assert.Equal("font-family", declaration.Name);
+        Assert.Equal("bold", declaration.Name);
+        Assert.True(sheet.Rules[0].Declarations[1].Known);   // font-family: CSS, not drawn, no warning
         var warning = Assert.Single(sheet.Warnings);
-        Assert.Contains("font-family", warning);
+        Assert.Contains("bold", warning);
         Assert.Contains("line 1", warning);
     }
 
+    [Fact]
+    public void At_rules_are_skipped_whole_and_custom_properties_are_declarations()
+    {
+        var sheet = Stylesheet.Parse("""
+            @import url("shared.css");
+            @media (prefers-color-scheme: dark) { div { color: white } .x { --y: 1 } }
+            :root { --accent: cyan }
+            div { color: var(--accent); padding: 1 !important }
+            """);
+        Assert.Equal(2, sheet.Rules.Count);
+        Assert.Equal(2, sheet.Warnings.Count);
+        Assert.True(sheet.Rules[0].Declarations[0].IsCustom);
+        Assert.Equal("var(--accent)", sheet.Rules[1].Declarations[0].Value);
+        Assert.Equal("1", sheet.Rules[1].Declarations[1].Value);
+    }
+
     [Theory]
-    [InlineData("box:hover { }", "hover")]
-    [InlineData("> text { }", "start with a combinator")]
-    [InlineData("box > { }", "end with a combinator")]
-    [InlineData("box { padding 1 }", "name: value")]
-    [InlineData("box { padding: 1 ", "closing")]
-    [InlineData("box .a[x] { }", "unexpected")]
-    [InlineData("box { padding: 1 } /* open", "comment is not closed")]
+    [InlineData("div:hover { }", "hover")]
+    [InlineData("> p { }", "start with a combinator")]
+    [InlineData("div > { }", "end with a combinator")]
+    [InlineData("div { padding 1 }", "name: value")]
+    [InlineData("div { padding: 1 ", "closing")]
+    [InlineData("div .a[x~=y] { }", "attribute selectors")]
+    [InlineData("div::before { }", "pseudo-elements")]
+    [InlineData("div { padding: 1 } /* open", "comment is not closed")]
     public void What_the_grammar_does_not_cover_is_refused_with_a_reason(string css, string reason)
     {
         var ex = Assert.Throws<FormatException>(() => Stylesheet.Parse(css));
@@ -114,11 +137,11 @@ public class StylesheetTests
     [Fact]
     public void Focus_dependence_is_known_per_sheet()
     {
-        Assert.False(Stylesheet.Parse("box { padding: 1 }").DependsOnFocus);
-        var focus = Stylesheet.Parse("box:focus { border: single }");
+        Assert.False(Stylesheet.Parse("div { padding: 1 }").DependsOnFocus);
+        var focus = Stylesheet.Parse("div:focus { border: solid }");
         Assert.True(focus.DependsOnFocus);
         Assert.False(focus.FocusAffectsDescendants);
-        var within = Stylesheet.Parse("box:focus-within text { color: red }");
+        var within = Stylesheet.Parse("div:focus-within p { color: red }");
         Assert.True(within.DependsOnFocus);
         Assert.True(within.FocusAffectsDescendants);
     }

@@ -1,18 +1,9 @@
-@* A coloured block with a label, for showing where layout put something. *@
-<Box Background="Background" Padding="Padding ?? new Edges(0, 1)" FlexGrow="Grow" FlexBasis="Basis" FlexShrink="Shrink" MaxWidth="MaxWidth" Width="Width" GridColumn="@GridColumn" GridRow="@GridRow">
-    <Text Color="@(Foreground ?? Color.White)">@Label</Text>
-</Box>
+@* A coloured block with a label, for showing where layout put something. Colour and place come from the caller's style. *@
+<div class="chip" style="@Style">@Label</div>
 
 @code {
     [Parameter, EditorRequired] public string Label { get; set; } = "";
-    [Parameter] public Color Background { get; set; } = Color.Blue;
-    [Parameter] public Color? Foreground { get; set; }
-    [Parameter] public Edges? Padding { get; set; }
-    [Parameter] public double? Grow { get; set; }
-    [Parameter] public double? Shrink { get; set; }
-    [Parameter] public Length? Basis { get; set; }
-    [Parameter] public Length? MaxWidth { get; set; }
-    [Parameter] public Length? Width { get; set; }
-    [Parameter] public string? GridColumn { get; set; }
-    [Parameter] public string? GridRow { get; set; }
+
+    /// <summary>Inline CSS for this chip: a background, a flex or grid placement, a size.</summary>
+    [Parameter] public string? Style { get; set; }
 }

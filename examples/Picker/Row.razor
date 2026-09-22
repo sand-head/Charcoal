@@ -1,7 +1,5 @@
 @* A row that only re-renders when its label or selection changes. *@
-<Box Padding="new Edges(0, 1)" Background="@(Selected ? Color.Cyan : Color.Default)" @onclick="OnClick" @onmouse="OnMouse">
-    <Text Color="@(Selected ? Color.Black : Color.Default)" Bold="Selected">@(Selected ? "▸ " : "  ")@Label</Text>
-</Box>
+<div class="@(Selected ? "row selected" : "row")" @onclick="OnClick" @onmouse="OnMouse">@(Selected ? "▸ " : "  ")@Label</div>
 
 @code {
     [Parameter, EditorRequired] public string Label { get; set; } = "";

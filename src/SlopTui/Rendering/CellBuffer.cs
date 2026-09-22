@@ -96,6 +96,8 @@ public sealed class CellBuffer
         if (width <= 0) return 0;
         if (y < Clip.Y || y >= Clip.Bottom || x < Clip.X || x + width > Clip.Right) return 0;
 
+        // Without a background of its own, text sits on whatever is already there.
+        if (background.Kind == ColorKind.Default) background = _cells[y * Width + x].Background;
         PutCell(x, y, new Cell(cluster, (byte)width, foreground, background, style));
         for (var i = 1; i < width; i++)
         {

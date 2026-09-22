@@ -1,7 +1,7 @@
 @*
-    A scrolling box, driven by the arrow and page keys when focused and by the
-    mouse wheel. ScrollTop binds two-way. With StickToBottom, growing content
-    stays in view while the end is showing.
+    A div with overflow: auto, scrolled by the arrow and page keys when
+    focused and by the mouse wheel. ScrollTop binds two-way. With
+    StickToBottom, growing content stays in view while the end is showing.
 
     The box's size and its content's come from the layout after each frame,
     so a scroll requested before the first frame lands on the next one.
@@ -9,23 +9,19 @@
 @implements IDisposable
 @inject TuiApp Tui
 
-<box id="@_id" overflow="scroll" scroll-y="@_scroll" flex-direction="@Direction" focusable="@Focusable" @onkeypress="OnKey" @onmouse="OnMouse" @onfocus="() => Focused = true" @onblur="() => Focused = false" @attributes="Attributes()">
-    @ChildContent
-</box>
+<div @ref="_element" style="@Style" tabindex="@(Focusable ? 0 : -1)" @onkeypress="OnKey" @onmouse="OnMouse" @onfocus="() => Focused = true" @onblur="() => Focused = false" @attributes="Attributes()">@ChildContent</div>
 
 @code {
-    private static long _next;
-    private readonly string _id = "scrollbox-" + Interlocked.Increment(ref _next);
+    private ElementReference _element;
     private int _scroll;
     private int _viewport;
     private int _content;
     private bool _atEnd = true;
+    private int _lastScrollTopParameter;
 
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
-    /// <summary>The flex direction of the content, a column by default.</summary>
-    [Parameter] public FlexDirection Direction { get; set; } = FlexDirection.Column;
-
+    /// <summary>Whether Tab reaches the box. A click focuses it either way.</summary>
     [Parameter] public bool Focusable { get; set; } = true;
 
     /// <summary>Takes focus when first shown.</summary>
@@ -41,47 +37,24 @@
 
     public int Position => _scroll;
 
-    private int _lastScrollTopParameter;
-
     [Parameter] public bool StickToBottom { get; set; }
 
     /// <summary>Rows scrolled per wheel notch.</summary>
     [Parameter] public int WheelRows { get; set; } = 3;
 
-    [Parameter] public double? FlexGrow { get; set; }
-    [Parameter] public double? FlexShrink { get; set; }
-    [Parameter] public Length? Width { get; set; }
-    [Parameter] public Length? Height { get; set; }
-    [Parameter] public Length? MinHeight { get; set; }
-    [Parameter] public Length? MaxHeight { get; set; }
-    [Parameter] public Edges? Padding { get; set; }
-    [Parameter] public Edges? Margin { get; set; }
-    [Parameter] public Color? Background { get; set; }
-    [Parameter] public BorderStyle? Border { get; set; }
-    [Parameter] public Color? BorderColor { get; set; }
-
     [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
 
-    private Dictionary<string, object> Attributes()
-    {
-        var attributes = new Dictionary<string, object>(AdditionalAttributes ?? new Dictionary<string, object>(), StringComparer.Ordinal);
-        Put(attributes, "flex-grow", FlexGrow);
-        Put(attributes, "flex-shrink", FlexShrink);
-        Put(attributes, "width", Width);
-        Put(attributes, "height", Height);
-        Put(attributes, "min-height", MinHeight);
-        Put(attributes, "max-height", MaxHeight);
-        Put(attributes, "padding", Padding);
-        Put(attributes, "margin", Margin);
-        Put(attributes, "background", Background);
-        Put(attributes, "border", Border);
-        Put(attributes, "border-color", BorderColor);
-        return attributes;
-    }
+    /// <summary>The scrolling, then the caller's own style.</summary>
+    private string Style => AdditionalAttributes?.GetValueOrDefault("style") is string { Length: > 0 } css
+        ? "overflow: auto; " + css
+        : "overflow: auto";
 
-    private static void Put<T>(Dictionary<string, object> attributes, string name, T? value) where T : struct
+    private IReadOnlyDictionary<string, object>? Attributes()
     {
-        if (value is { } set) attributes[name] = set;
+        if (AdditionalAttributes is null || !AdditionalAttributes.ContainsKey("style")) return AdditionalAttributes;
+        var rest = new Dictionary<string, object>(AdditionalAttributes);
+        rest.Remove("style");
+        return rest;
     }
 
     public bool Focused { get; private set; }
@@ -91,13 +64,16 @@
 
     public bool AtEnd => _scroll >= MaxScroll;
 
+    /// <summary>The rendered div, once there is one.</summary>
+    public HostElement? Element => Tui.Renderer.Element(_element);
+
     protected override void OnInitialized() => Tui.FramePainted += OnFrame;
 
     protected override void OnAfterRender(bool firstRender)
     {
-        if (!firstRender || !Autofocus || !Focusable) return;
-        var element = Tui.Renderer.Root.Descendants().OfType<HostElement>().FirstOrDefault(e => e.Id == _id);
-        if (element is not null) _ = Tui.Focus.FocusAsync(element);
+        // A re-render may have replaced the div, and the scroll offset lives on the element.
+        if (Element is { } element) element.Node.ScrollTop = _scroll;
+        if (firstRender && Autofocus && Focusable && Element is { } target) _ = Tui.Focus.FocusAsync(target);
     }
 
     protected override void OnParametersSet()
@@ -122,20 +98,21 @@
         _atEnd = clamped >= MaxScroll;
         if (clamped == _scroll) return;
         _scroll = clamped;
+        if (Element is { } element)
+        {
+            element.Node.ScrollTop = _scroll;
+            Tui.Invalidate();
+        }
         await ScrollTopChanged.InvokeAsync(_scroll);
         StateHasChanged();
     }
 
     private void OnFrame(FrameStats stats)
     {
-        var element = Tui.Renderer.Root.Descendants().OfType<HostElement>().FirstOrDefault(e => e.Id == _id);
-        if (element is null) return;
-
+        if (Element is not { } element) return;
         var node = element.Node;
-        var inner = node.Layout.Deflate(node.Style.Inset);
-        var vertical = Direction is FlexDirection.Column or FlexDirection.ColumnReverse;
-        var viewport = vertical ? inner.Height : inner.Width;
-        var content = vertical ? node.ContentSize.Height : node.ContentSize.Width;
+        var viewport = node.Layout.Deflate(node.Style.Inset).Height;
+        var content = node.ContentSize.Height;
         if (viewport == _viewport && content == _content) return;
         _viewport = viewport;
         _content = content;

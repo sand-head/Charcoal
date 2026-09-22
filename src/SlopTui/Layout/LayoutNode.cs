@@ -29,6 +29,41 @@ public abstract class LayoutNode
     /// <summary>The rect the engine assigned, in absolute terminal cells.</summary>
     public Rect Layout { get; internal set; }
 
+    private int _scrollTop;
+    private int _scrollLeft;
+
+    /// <summary>
+    /// How far a clipping box's content is scrolled up, in rows, as the DOM's
+    /// <c>scrollTop</c>. Changing it re-arranges the box without re-measuring.
+    /// </summary>
+    public int ScrollTop
+    {
+        get => _scrollTop;
+        set => SetScroll(ref _scrollTop, value);
+    }
+
+    /// <summary>How far a clipping box's content is scrolled left, in columns.</summary>
+    public int ScrollLeft
+    {
+        get => _scrollLeft;
+        set => SetScroll(ref _scrollLeft, value);
+    }
+
+    private void SetScroll(ref int offset, int value)
+    {
+        value = Math.Max(0, value);
+        if (offset == value) return;
+        offset = value;
+        InvalidateArrange();
+    }
+
+    /// <summary>
+    /// The vertical margins of this block's first and last children that
+    /// collapse through its edges, for the block above to add to its own.
+    /// </summary>
+    public int MarginTopThrough { get; internal set; }
+    public int MarginBottomThrough { get; internal set; }
+
     /// <summary>The size of the in-flow content the last arrange placed, before scrolling.</summary>
     public Size ContentSize { get; internal set; }
 
@@ -52,6 +87,15 @@ public abstract class LayoutNode
             node.LayoutDirty = true;
             node.ArrangeDirty = true;
             node.MinCache = null;
+        }
+    }
+
+    /// <summary>Marks the arrangement stale while keeping the measurements.</summary>
+    public void InvalidateArrange()
+    {
+        for (var node = this; node is not null && !node.ArrangeDirty; node = node.LayoutParent)
+        {
+            node.ArrangeDirty = true;
         }
     }
 

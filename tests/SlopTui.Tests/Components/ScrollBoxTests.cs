@@ -20,11 +20,12 @@ public class ScrollBoxTests
         {
             b.OpenComponent<ScrollBox>(0);
             b.AddComponentParameter(1, nameof(ScrollBox.StickToBottom), true);
+            b.AddComponentParameter(4, "style", "height: 100%");   // a scroll container needs a height of its own, as on a page
             b.AddComponentParameter(2, nameof(ScrollBox.ChildContent), (RenderFragment)(inner =>
             {
                 for (var i = 1; i <= Lines; i++)
                 {
-                    inner.OpenElement(0, "text");
+                    inner.OpenElement(0, "div");
                     inner.SetKey(i);
                     inner.AddContent(1, $"line {i}");
                     inner.CloseElement();
@@ -58,8 +59,8 @@ public class ScrollBoxTests
         WaitUntil(() => box.MaxScroll == 30, "the box to learn its sizes (content 40, viewport 10)", run);
         // Sticky: it followed to the end, so the last line is on screen.
         WaitUntil(() => box.Position == 30, "the sticky scroll to land", run);
-        var el = app.Renderer.Root.Descendants().OfType<HostElement>().First(e => e.Id is { } id && id.StartsWith("scrollbox-"));
-        WaitUntil(() => el.Node.Style.ScrollY == 30, "the scroll-y attribute to reach the element", run);
+        var el = box.Element!;
+        WaitUntil(() => el.Node.ScrollTop == 30, "the scroll to reach the element", run);
         Thread.Sleep(100);
         var last = el.Node.Children[^1];
         Assert.Equal(new global::SlopTui.Layout.Size(40, 40), el.Node.ContentSize);
@@ -70,8 +71,7 @@ public class ScrollBoxTests
         Assert.True(box.AtEnd);
 
         // Keys move it and unstick it.
-        var element = app.Renderer.Root.Descendants().OfType<HostElement>().First(e => e.Id is { } id && id.StartsWith("scrollbox-"));
-        await app.InvokeAsync(() => app.Focus.FocusAsync(element));
+        await app.InvokeAsync(() => app.Focus.FocusAsync(el));
         var before = terminal.Writes.Count;
         terminal.Inject("\e[5~");   // PageUp
         WaitUntil(() => terminal.Writes.Count > before && box.Position == 21, "a page up", run);
@@ -91,18 +91,15 @@ public class ScrollBoxTests
 
         protected override void BuildRenderTree(RenderTreeBuilder b)
         {
-            b.OpenElement(0, "box");
-            b.AddAttribute(1, "gap", 1);
-            b.AddAttribute(2, "flex-grow", 1);
+            b.OpenElement(0, "div");
+            b.AddAttribute(1, "style", "display: flex; gap: 1; height: 100%");
             b.OpenComponent<ScrollBox>(3);
-            b.AddComponentParameter(4, nameof(ScrollBox.FlexGrow), 1.0);
-            b.AddComponentParameter(5, nameof(ScrollBox.Border), global::SlopTui.Layout.BorderStyle.Single);
-            b.AddComponentParameter(6, nameof(ScrollBox.Padding), new global::SlopTui.Layout.Edges(0, 1));
+            b.AddComponentParameter(4, "style", "flex: 1; border: solid; padding: 0 1");
             b.AddComponentParameter(7, nameof(ScrollBox.ChildContent), (RenderFragment)(inner =>
             {
                 for (var i = 1; i <= 40; i++)
                 {
-                    inner.OpenElement(0, "text");
+                    inner.OpenElement(0, "div");
                     inner.SetKey(i);
                     inner.AddContent(1, $"line {i}");
                     inner.CloseElement();
@@ -110,9 +107,9 @@ public class ScrollBoxTests
             }));
             b.AddComponentReferenceCapture(8, o => Box = (ScrollBox)o);
             b.CloseComponent();
-            b.OpenElement(9, "box");
-            b.AddAttribute(10, "width", 20);
-            b.OpenElement(11, "text"); b.AddContent(12, "panel"); b.CloseElement();
+            b.OpenElement(9, "div");
+            b.AddAttribute(10, "style", "width: 20");
+            b.AddContent(12, "panel");
             b.CloseElement();
             b.CloseElement();
         }
@@ -126,9 +123,9 @@ public class ScrollBoxTests
         var run = Task.Run(() => app.Run<RowHost>());
         WaitUntil(() => terminal.Writes.Count > 0 && RowHost.Last?.Box is not null, "the first frame", run);
         Thread.Sleep(100);
-        var el = app.Renderer.Root.Descendants().OfType<HostElement>().First(e => e.Id is { } id && id.StartsWith("scrollbox-"));
         var box = RowHost.Last!.Box!;
-        Assert.True(box.MaxScroll == 30, $"MaxScroll {box.MaxScroll}: box rect {el.Node.Layout}, content {el.Node.ContentSize}, style overflow {el.Node.Style.Overflow}, direction {el.Node.Style.FlexDirection}, children {el.Node.Children.Count}");
+        var el = box.Element!;
+        Assert.True(box.MaxScroll == 30, $"MaxScroll {box.MaxScroll}: box rect {el.Node.Layout}, content {el.Node.ContentSize}, style overflow {el.Node.Style.Overflow}, children {el.Node.Children.Count}");
         app.Exit();
         await run;
     }

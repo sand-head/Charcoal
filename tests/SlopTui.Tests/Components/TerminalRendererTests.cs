@@ -44,27 +44,29 @@ public class TerminalRendererTests
         var (renderer, _) = Make();
         var root = Root(renderer, typeof(Fragment), Body(b =>
         {
-            b.OpenElement(0, "box");
-            b.AddAttribute(1, "flex-direction", "column");
-            b.AddAttribute(2, "padding", 2);
-            b.AddAttribute(3, "background", "red");
-            b.OpenElement(4, "text");
-            b.AddAttribute(5, "bold", true);
-            b.AddContent(6, "hi");
+            b.OpenElement(0, "div");
+            b.AddAttribute(1, "style", "display: flex; flex-direction: column; padding: 2; background: red");
+            b.OpenElement(2, "span");
+            b.AddAttribute(3, "style", "font-weight: bold");
+            b.AddContent(4, "hi");
             b.CloseElement();
             b.CloseElement();
         }));
 
-        var box = Assert.Single(Elements(root), e => e.Name == "box" && !ReferenceEquals(e, root));
-        Assert.Equal(FlexDirection.Column, box.Node.Style.FlexDirection);
-        Assert.Equal(new Edges(2), box.Node.Style.Padding);
-        Assert.Equal(Color.Red, box.Node.Style.Background);
+        var div = Assert.Single(Elements(root), e => e.Name == "div");
+        Assert.Equal(Display.Flex, div.Node.Style.Display);
+        Assert.Equal(FlexDirection.Column, div.Node.Style.FlexDirection);
+        Assert.Equal(new Edges(2), div.Node.Style.Padding);
+        Assert.Equal(Color.Red, div.Node.Style.Background);
 
-        var text = Assert.Single(Elements(root), e => e.Name == "text");
-        Assert.Equal(TextStyle.Bold, text.Node.Style.TextStyle);
-        var run = Assert.Single(text.Runs);
+        var span = Assert.Single(Elements(root), e => e.Name == "span");
+        Assert.Equal(TextStyle.Bold, span.Node.Style.TextStyle);
+        var run = Assert.Single(span.Runs);
         Assert.Equal("hi", run.Text);
         Assert.Equal(TextStyle.Bold, run.Style);
+        // The span is a run in the div's anonymous text leaf, not a box of its own.
+        var leaf = Assert.IsType<AnonymousTextNode>(Assert.Single(div.LayoutChildren));
+        Assert.Equal("hi", leaf.Runs[0].Text);
     }
 
     [Fact]
@@ -73,51 +75,49 @@ public class TerminalRendererTests
         var (renderer, _) = Make();
         var root = Root(renderer, typeof(Fragment), Body(b =>
         {
-            b.OpenElement(0, "box");
+            b.OpenElement(0, "div");
             b.OpenRegion(1);
-            b.OpenElement(2, "text"); b.AddContent(3, "a"); b.CloseElement();
+            b.OpenElement(2, "p"); b.AddContent(3, "a"); b.CloseElement();
             b.OpenComponent<Fragment>(4);
             b.AddComponentParameter(5, "Body", (RenderFragment)(inner =>
             {
-                inner.OpenElement(0, "text"); inner.AddContent(1, "b"); inner.CloseElement();
+                inner.OpenElement(0, "p"); inner.AddContent(1, "b"); inner.CloseElement();
             }));
             b.CloseComponent();
             b.CloseRegion();
             b.CloseElement();
         }));
 
-        var box = Elements(root).First(e => e.Name == "box" && !ReferenceEquals(e, root));
+        var div = Elements(root).First(e => e.Name == "div");
         // Two layout children in order, though logically one is inside a region and one inside a component.
-        Assert.Equal(["a", "b"], box.LayoutChildren.Cast<ElementLayoutNode>().Select(n => n.Element.Runs[0].Text));
-        // Logically the box has one child: the region's contents are inlined as its children (regions have no node),
-        // so the text and the component container are the box's logical children.
-        Assert.Equal(2, box.Children.Count);
-        Assert.IsType<HostContainer>(box.Children[1]);
+        Assert.Equal(["a", "b"], div.LayoutChildren.Cast<ElementLayoutNode>().Select(n => n.Element.Runs[0].Text));
+        // Logically the div has two children: the region's contents are inlined as its children (regions have no node),
+        // so the paragraph and the component container are the div's logical children.
+        Assert.Equal(2, div.Children.Count);
+        Assert.IsType<HostContainer>(div.Children[1]);
     }
 
     [Fact]
-    public void Nested_text_is_a_run_with_the_outer_style_inherited_and_overridden()
+    public void A_nested_span_is_a_run_with_the_outer_style_inherited_and_overridden()
     {
         var (renderer, _) = Make();
         var root = Root(renderer, typeof(Fragment), Body(b =>
         {
-            b.OpenElement(0, "text");
-            b.AddAttribute(1, "color", "green");
-            b.AddAttribute(2, "bold", true);
-            b.AddContent(3, "plain ");
-            b.OpenElement(4, "text");
-            b.AddAttribute(5, "color", "red");
-            b.AddAttribute(6, "underline", true);
-            b.AddContent(7, "loud");
+            b.OpenElement(0, "p");
+            b.AddAttribute(1, "style", "color: green; font-weight: bold");
+            b.AddContent(2, "plain ");
+            b.OpenElement(3, "span");
+            b.AddAttribute(4, "style", "color: red; text-decoration: underline");
+            b.AddContent(5, "loud");
             b.CloseElement();
             b.CloseElement();
         }));
 
-        var text = Elements(root).First(e => e.Name == "text");
-        Assert.Empty(text.LayoutChildren);   // a text leaf has no layout children, whatever is nested
-        Assert.Equal(2, text.Runs.Count);
-        Assert.Equal(("plain ", Color.Green, TextStyle.Bold), (text.Runs[0].Text, text.Runs[0].Foreground, text.Runs[0].Style));
-        Assert.Equal(("loud", Color.Red, TextStyle.Bold | TextStyle.Underline), (text.Runs[1].Text, text.Runs[1].Foreground, text.Runs[1].Style));
+        var p = Elements(root).First(e => e.Name == "p");
+        Assert.IsType<AnonymousTextNode>(Assert.Single(p.LayoutChildren));   // one leaf, whatever is nested
+        Assert.Equal(2, p.Runs.Count);
+        Assert.Equal(("plain ", Color.Green, TextStyle.Bold), (p.Runs[0].Text, p.Runs[0].Foreground, p.Runs[0].Style));
+        Assert.Equal(("loud", Color.Red, TextStyle.Bold | TextStyle.Underline), (p.Runs[1].Text, p.Runs[1].Foreground, p.Runs[1].Style));
     }
 
     private sealed class Toggle : ComponentBase
@@ -129,12 +129,12 @@ public class TerminalRendererTests
 
         protected override void BuildRenderTree(RenderTreeBuilder builder)
         {
-            builder.OpenElement(0, "box");
-            builder.AddAttribute(1, "gap", Show ? 1 : 3);
-            builder.OpenElement(2, "text"); builder.AddContent(3, Label); builder.CloseElement();
+            builder.OpenElement(0, "div");
+            builder.AddAttribute(1, "style", "display: flex; gap: " + (Show ? 1 : 3));
+            builder.OpenElement(2, "p"); builder.AddContent(3, Label); builder.CloseElement();
             if (Show)
             {
-                builder.OpenElement(4, "text"); builder.AddContent(5, "two"); builder.CloseElement();
+                builder.OpenElement(4, "p"); builder.AddContent(5, "two"); builder.CloseElement();
             }
             builder.CloseElement();
         }
@@ -154,9 +154,9 @@ public class TerminalRendererTests
         }));
         Assert.NotNull(instance);
 
-        var box = Elements(root).First(e => e.Name == "box" && !ReferenceEquals(e, root));
-        Assert.Equal(2, box.LayoutChildren.Count);
-        Assert.Equal(1, box.Node.Style.ColumnGap);
+        var div = Elements(root).First(e => e.Name == "div");
+        Assert.Equal(2, div.LayoutChildren.Count);
+        Assert.Equal(1, div.Node.Style.ColumnGap);
 
         renderer.Dirty = false;
         instance!.Show = false;
@@ -164,10 +164,10 @@ public class TerminalRendererTests
         instance.Rerender();
 
         Assert.True(renderer.Dirty);
-        Assert.Equal(3, box.Node.Style.ColumnGap);
-        var only = Assert.Single(box.LayoutChildren);
+        Assert.Equal(3, div.Node.Style.ColumnGap);
+        var only = Assert.Single(div.LayoutChildren);
         Assert.Equal("uno", ((ElementLayoutNode)only).Element.Runs[0].Text);
-        Assert.True(box.Node.LayoutDirty);
+        Assert.True(div.Node.LayoutDirty);
     }
 
     private sealed class Keyed : ComponentBase
@@ -177,10 +177,10 @@ public class TerminalRendererTests
 
         protected override void BuildRenderTree(RenderTreeBuilder builder)
         {
-            builder.OpenElement(0, "box");
+            builder.OpenElement(0, "div");
             foreach (var item in Items)
             {
-                builder.OpenElement(1, "text");
+                builder.OpenElement(1, "p");
                 builder.SetKey(item);
                 builder.AddContent(2, item);
                 builder.CloseElement();
@@ -200,13 +200,13 @@ public class TerminalRendererTests
             b.AddComponentReferenceCapture(1, o => instance = (Keyed)o);
             b.CloseComponent();
         }));
-        var box = Elements(root).First(e => e.Name == "box" && !ReferenceEquals(e, root));
-        var before = box.LayoutChildren.Cast<ElementLayoutNode>().Select(n => n.Element).ToArray();
+        var div = Elements(root).First(e => e.Name == "div");
+        var before = div.LayoutChildren.Cast<ElementLayoutNode>().Select(n => n.Element).ToArray();
 
         instance!.Items.Reverse();
         instance.Rerender();
 
-        var after = box.LayoutChildren.Cast<ElementLayoutNode>().Select(n => n.Element).ToArray();
+        var after = div.LayoutChildren.Cast<ElementLayoutNode>().Select(n => n.Element).ToArray();
         Assert.Equal(["c", "b", "a"], after.Select(e => e.Runs[0].Text));
         Assert.Same(before[0], after[2]);
         Assert.Same(before[2], after[0]);
@@ -219,47 +219,75 @@ public class TerminalRendererTests
         KeyPressEventArgs? received = null;
         var root = Root(renderer, typeof(Fragment), Body(b =>
         {
-            b.OpenElement(0, "box");
+            b.OpenElement(0, "div");
             b.AddAttribute(1, "onkeypress", EventCallback.Factory.Create<KeyPressEventArgs>(new object(), e => received = e));
-            b.AddAttribute(2, "focusable", true);
+            b.AddAttribute(2, "tabindex", 0);
             b.CloseElement();
         }));
 
-        var box = Elements(root).First(e => e.Name == "box" && !ReferenceEquals(e, root));
-        Assert.True(box.Focusable);
-        Assert.NotNull(box.HandlerFor("onkeypress"));
-        Assert.Same(box, renderer.OwnerOf(box.HandlerFor("onkeypress")!.Value));
+        var div = Elements(root).First(e => e.Name == "div");
+        Assert.True(div.Focusable);
+        Assert.NotNull(div.HandlerFor("onkeypress"));
+        Assert.Same(div, renderer.OwnerOf(div.HandlerFor("onkeypress")!.Value));
 
         var args = new KeyPressEventArgs(new KeyEvent(Key.Enter, KeyModifiers.None, ""));
-        Assert.True(await renderer.RaiseAsync(box, "onkeypress", args));
+        Assert.True(await renderer.RaiseAsync(div, "onkeypress", args));
         Assert.Same(args, received);
-        Assert.False(await renderer.RaiseAsync(box, "onclick", args));
+        Assert.False(await renderer.RaiseAsync(div, "onclick", args));
     }
 
     [Fact]
-    public void The_root_box_fills_the_viewport_and_lays_out_a_component()
+    public void The_root_body_fills_the_viewport_and_lays_out_a_component_as_blocks()
     {
         var (renderer, _) = Make();
         renderer.SetViewport(new Size(40, 10));
         var root = Root(renderer, typeof(Fragment), Body(b =>
         {
-            b.OpenElement(0, "box");
-            b.AddAttribute(1, "flex-grow", 1);
-            b.AddAttribute(2, "padding", 1);
-            b.OpenElement(3, "text"); b.AddContent(4, "hello"); b.CloseElement();
+            b.OpenElement(0, "div");
+            b.AddAttribute(1, "style", "height: 100%; padding: 1");
+            b.AddContent(2, "hello");
+            b.OpenElement(3, "p"); b.AddContent(4, "para"); b.CloseElement();
             b.CloseElement();
         }));
 
         FlexLayout.Layout(root.Node, new Size(40, 10));
-        var box = Elements(root).First(e => e.Name == "box" && !ReferenceEquals(e, root));
-        var text = Elements(root).First(e => e.Name == "text");
+        var div = Elements(root).First(e => e.Name == "div");
+        var p = Elements(root).First(e => e.Name == "p");
+        Assert.Equal("body", root.Name);
         Assert.Equal(new Rect(0, 0, 40, 10), root.Node.Layout);
-        Assert.Equal(new Rect(0, 0, 40, 10), box.Node.Layout);
-        // A text in a row box is stretched on the cross axis, as any flex item is; it paints its lines at the top.
-        Assert.Equal(new Rect(1, 1, 5, 8), text.Node.Layout);
+        Assert.Equal(new Rect(0, 0, 40, 10), div.Node.Layout);
+        // Block layout: the text is a full-width line box; the paragraph follows after its margin.
+        Assert.Equal(new Rect(1, 1, 38, 1), div.LayoutChildren[0].Layout);
+        Assert.Equal(new Rect(1, 3, 38, 1), p.Node.Layout);
 
         var buffer = new CellBuffer(40, 10);
         Painter.Paint(root.Node, buffer);
         Assert.Equal(" hello", buffer.RowText(1).TrimEnd());
+        Assert.Equal(" para", buffer.RowText(3).TrimEnd());
+    }
+
+    private sealed class WithRef : ComponentBase
+    {
+        public static WithRef? Last;
+        public ElementReference Element;
+        protected override void OnInitialized() => Last = this;
+
+        protected override void BuildRenderTree(RenderTreeBuilder b)
+        {
+            b.OpenElement(0, "div");
+            b.AddAttribute(1, "id", "target");
+            b.AddElementReferenceCapture(2, r => Element = r);
+            b.CloseElement();
+        }
+    }
+
+    [Fact]
+    public void An_element_reference_resolves_to_its_host_element()
+    {
+        var (renderer, _) = Make();
+        var root = Root(renderer, typeof(WithRef));
+        var target = Elements(root).First(e => e.Id == "target");
+        Assert.Same(target, renderer.Element(WithRef.Last!.Element));
+        Assert.Null(renderer.Element(default));
     }
 }

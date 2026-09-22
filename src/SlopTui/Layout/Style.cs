@@ -2,7 +2,13 @@ using SlopTui.Rendering;
 
 namespace SlopTui.Layout;
 
-public enum Display { Flex, Grid, None }
+/// <summary>
+/// CSS <c>display</c>. As in CSS the initial value is <see cref="Inline"/>,
+/// and the user-agent sheet makes block elements <see cref="Block"/>. The
+/// layout engine treats an inline node it is handed as a block; only the host
+/// tree groups inline elements into text.
+/// </summary>
+public enum Display { Block, Inline, Flex, Grid, None }
 public enum FlexDirection { Row, Column, RowReverse, ColumnReverse }
 public enum FlexWrap { NoWrap, Wrap, WrapReverse }
 public enum JustifyContent { FlexStart, Center, FlexEnd, SpaceBetween, SpaceAround, SpaceEvenly }
@@ -15,14 +21,40 @@ public enum AlignContent { Stretch, FlexStart, Center, FlexEnd, SpaceBetween, Sp
 public enum AlignSelf { Auto, Stretch, FlexStart, Center, FlexEnd }
 
 /// <summary>
-/// What a box does with content larger than itself. As in CSS, only a
+/// What a box does with content larger than itself. <see cref="Scroll"/>
+/// (also <c>auto</c>) clips and scrolls by <see cref="LayoutNode.ScrollTop"/>
+/// and <see cref="LayoutNode.ScrollLeft"/>. As in CSS, only a
 /// <see cref="Visible"/> box keeps its content's size as its minimum.
 /// </summary>
 public enum Overflow { Visible, Hidden, Scroll }
 public enum Position { Relative, Absolute }
-public enum BorderStyle { None, Single, Double, Round, Bold, Classic }
 
-/// <summary>How a text leaf fits its width.</summary>
+/// <summary>CSS <c>visibility</c>: a hidden box keeps its place and paints nothing.</summary>
+public enum Visibility { Visible, Hidden }
+
+/// <summary>
+/// CSS <c>border-style</c>. Solid is a single line, rounded with a
+/// <c>border-radius</c> and heavy with a <c>thick</c> width; dashed and
+/// dotted are drawn in ASCII.
+/// </summary>
+public enum BorderStyle { None, Solid, Double, Dashed, Dotted }
+
+/// <summary>The glyphs a border is drawn with, derived from its style, width and radius.</summary>
+public enum BorderGlyphSet { None, Single, Double, Round, Bold, Classic }
+
+/// <summary>CSS <c>white-space</c>: whether whitespace collapses and whether lines wrap.</summary>
+public enum WhiteSpace { Normal, NoWrap, Pre, PreWrap, PreLine }
+
+/// <summary>
+/// CSS <c>text-overflow</c> for a line that neither wraps nor fits.
+/// <see cref="EllipsisStart"/> is written <c>ellipsis clip</c> and
+/// <see cref="EllipsisMiddle"/> <c>ellipsis ellipsis</c>.
+/// </summary>
+public enum TextOverflow { Clip, Ellipsis, EllipsisStart, EllipsisMiddle }
+
+public enum TextAlign { Left, Center, Right }
+
+/// <summary>How a text fits its width, derived from <c>white-space</c> and <c>text-overflow</c>.</summary>
 public enum TextWrap
 {
     /// <summary>Break at spaces, then anywhere, so every cluster is shown.</summary>
@@ -67,19 +99,24 @@ public sealed class TrackList : List<Track>
 }
 
 /// <summary>What kind of value a <see cref="Length"/> holds.</summary>
-public enum LengthUnit { Auto, Cells, Percent }
+public enum LengthUnit { Auto, Cells, Percent, FitContent }
 
-/// <summary>A size on one axis: cells, a percentage of the parent's content box, or auto.</summary>
+/// <summary>
+/// A size on one axis: cells, a percentage of the parent's content box,
+/// <see cref="Auto"/> for whatever the layout gives, or
+/// <see cref="FitContent"/> for the content's own size.
+/// </summary>
 public readonly record struct Length(LengthUnit Unit, int Value)
 {
     public static readonly Length Auto = new(LengthUnit.Auto, 0);
+    public static readonly Length FitContent = new(LengthUnit.FitContent, 0);
 
     public static Length Cells(int cells) => new(LengthUnit.Cells, cells);
     public static Length Percent(int percent) => new(LengthUnit.Percent, percent);
 
     public bool IsAuto => Unit == LengthUnit.Auto;
 
-    /// <summary>The length in cells, or null when it is auto or a percentage of an unknown extent.</summary>
+    /// <summary>The length in cells, or null when it is not fixed or is a percentage of an unknown extent.</summary>
     public int? Resolve(int? parentExtent) => Unit switch
     {
         LengthUnit.Cells => Value,
@@ -93,18 +130,25 @@ public readonly record struct Length(LengthUnit Unit, int Value)
     {
         LengthUnit.Cells => Value.ToString(),
         LengthUnit.Percent => Value + "%",
+        LengthUnit.FitContent => "fit-content",
         _ => "auto",
     };
 }
 
 /// <summary>
-/// The CSS subset the layout engine and the painter understand. Boxes ignore
-/// the text properties; text leaves are flex items too, so they share the rest.
+/// The CSS properties the layout engine and the painter understand, under
+/// their CSS names, measured in cells where CSS uses pixels.
 /// </summary>
+/// <remarks>
+/// Terminal attributes without a CSS property are reached through the
+/// closest one: <c>opacity</c> dims and <c>filter: invert()</c> inverts. The
+/// text properties are inherited, so every element carries the look its text
+/// paints with.
+/// </remarks>
 public sealed record Style
 {
     // Layout
-    public Display Display { get; init; } = Display.Flex;
+    public Display Display { get; init; } = Display.Inline;
     public Position Position { get; init; } = Position.Relative;
     public FlexDirection FlexDirection { get; init; } = FlexDirection.Row;
     public FlexWrap FlexWrap { get; init; } = FlexWrap.NoWrap;
@@ -129,10 +173,7 @@ public sealed record Style
     public int RowGap { get; init; }
     public int ColumnGap { get; init; }
     public Overflow Overflow { get; init; } = Overflow.Visible;
-
-    /// <summary>How far a scrolling box's content is scrolled, in cells.</summary>
-    public int ScrollX { get; init; }
-    public int ScrollY { get; init; }
+    public Visibility Visibility { get; init; } = Visibility.Visible;
 
     // Grid
     /// <summary>Empty means one auto column.</summary>
@@ -153,25 +194,118 @@ public sealed record Style
 
     // Box visuals
     public Color Background { get; init; } = Color.Default;
-    public BorderStyle Border { get; init; } = BorderStyle.None;
-    public Color BorderColor { get; init; } = Color.Default;
-    public bool BorderTop { get; init; } = true;
-    public bool BorderRight { get; init; } = true;
-    public bool BorderBottom { get; init; } = true;
-    public bool BorderLeft { get; init; } = true;
 
-    // Text
+    /// <summary>The style of every side that does not set its own.</summary>
+    public BorderStyle BorderStyle { get; init; } = BorderStyle.None;
+    public BorderStyle? BorderTopStyle { get; init; }
+    public BorderStyle? BorderRightStyle { get; init; }
+    public BorderStyle? BorderBottomStyle { get; init; }
+    public BorderStyle? BorderLeftStyle { get; init; }
+
+    /// <summary>1 for <c>thin</c> and <c>medium</c>, 2 for <c>thick</c>, which is drawn heavy.</summary>
+    public int BorderWidth { get; init; } = 1;
+
+    /// <summary>Any radius above zero rounds the corners of a solid border.</summary>
+    public int BorderRadius { get; init; }
+
+    /// <summary><see cref="Color.Default"/> means <c>currentcolor</c>.</summary>
+    public Color BorderColor { get; init; } = Color.Default;
+
+    // Text, inherited
     public Color Color { get; init; } = Color.Default;
+
     public TextStyle TextStyle { get; init; } = TextStyle.None;
-    public TextWrap Wrap { get; init; } = TextWrap.Wrap;
+
+    /// <summary>
+    /// Flags this element turned off, such as <c>font-weight: normal</c> under
+    /// a bold parent, so inheritance does not turn them back on.
+    /// </summary>
+    public TextStyle TextStyleReset { get; init; } = TextStyle.None;
+
+    public WhiteSpace WhiteSpace { get; init; } = WhiteSpace.Normal;
+    public TextOverflow TextOverflow { get; init; } = TextOverflow.Clip;
+    public TextAlign TextAlign { get; init; } = TextAlign.Left;
+
+    /// <summary>The inherited properties this element set itself, which inheritance leaves alone.</summary>
+    public StyleSet Set { get; init; } = StyleSet.None;
+
+    /// <summary>The custom properties (<c>--name</c>) in force here, inherited.</summary>
+    public IReadOnlyDictionary<string, string> CustomProperties { get; init; } = NoCustomProperties;
+
+    public static readonly IReadOnlyDictionary<string, string> NoCustomProperties = new Dictionary<string, string>();
 
     public static readonly Style Default = new();
 
+    /// <summary>A side's own border style, or else the shared one.</summary>
+    public BorderStyle SideStyle(Side side) => side switch
+    {
+        Side.Top => BorderTopStyle ?? BorderStyle,
+        Side.Right => BorderRightStyle ?? BorderStyle,
+        Side.Bottom => BorderBottomStyle ?? BorderStyle,
+        _ => BorderLeftStyle ?? BorderStyle,
+    };
+
+    public bool BorderTop => SideStyle(Side.Top) != BorderStyle.None;
+    public bool BorderRight => SideStyle(Side.Right) != BorderStyle.None;
+    public bool BorderBottom => SideStyle(Side.Bottom) != BorderStyle.None;
+    public bool BorderLeft => SideStyle(Side.Left) != BorderStyle.None;
+
+    public bool HasBorder => BorderTop || BorderRight || BorderBottom || BorderLeft;
+
+    /// <summary>The glyphs the border is drawn with, chosen by the first style that draws.</summary>
+    public BorderGlyphSet BorderGlyphs => FirstDrawnBorderStyle() switch
+    {
+        BorderStyle.Solid when BorderRadius > 0 => BorderGlyphSet.Round,
+        BorderStyle.Solid when BorderWidth >= 2 => BorderGlyphSet.Bold,
+        BorderStyle.Solid => BorderGlyphSet.Single,
+        BorderStyle.Double => BorderGlyphSet.Double,
+        BorderStyle.Dashed or BorderStyle.Dotted => BorderGlyphSet.Classic,
+        _ => BorderGlyphSet.None,
+    };
+
+    private BorderStyle FirstDrawnBorderStyle()
+    {
+        BorderStyle?[] candidates = [BorderStyle, BorderTopStyle, BorderRightStyle, BorderBottomStyle, BorderLeftStyle];
+        foreach (var candidate in candidates)
+        {
+            if (candidate is { } style and not BorderStyle.None) return style;
+        }
+        return BorderStyle.None;
+    }
+
     /// <summary>The cells the border takes on each side.</summary>
-    public Edges BorderEdges => Border == BorderStyle.None
-        ? Edges.Zero
-        : new Edges(BorderTop ? 1 : 0, BorderRight ? 1 : 0, BorderBottom ? 1 : 0, BorderLeft ? 1 : 0);
+    public Edges BorderEdges => new(BorderTop ? 1 : 0, BorderRight ? 1 : 0, BorderBottom ? 1 : 0, BorderLeft ? 1 : 0);
 
     /// <summary>Border plus padding.</summary>
     public Edges Inset => BorderEdges + Padding;
+
+    /// <summary>Wrapping for the wrapping white-space modes, else the cut <c>text-overflow</c> asks for.</summary>
+    public TextWrap Wrap
+    {
+        get
+        {
+            if (WhiteSpace is WhiteSpace.Normal or WhiteSpace.PreWrap or WhiteSpace.PreLine) return TextWrap.Wrap;
+            return TextOverflow switch
+            {
+                TextOverflow.Ellipsis => TextWrap.Truncate,
+                TextOverflow.EllipsisStart => TextWrap.TruncateStart,
+                TextOverflow.EllipsisMiddle => TextWrap.TruncateMiddle,
+                _ => TextWrap.Clip,
+            };
+        }
+    }
+
+    public bool IsInline => Display == Display.Inline;
+}
+
+public enum Side { Top, Right, Bottom, Left }
+
+/// <summary>The inherited properties an element set itself; see <see cref="Style.Set"/>.</summary>
+[Flags]
+public enum StyleSet
+{
+    None = 0,
+    Color = 1,
+    WhiteSpace = 2,
+    TextAlign = 4,
 }

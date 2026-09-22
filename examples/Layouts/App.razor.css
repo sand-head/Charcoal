@@ -1,0 +1,5 @@
+.app { display: flex; flex-direction: column; height: 100% }
+.header, .footer { padding: 0 1; white-space: nowrap }
+.header { display: flex; gap: 2 }
+.title { font-weight: bold }
+.muted { opacity: 0.5 }

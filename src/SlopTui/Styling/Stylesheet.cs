@@ -4,18 +4,24 @@ using SlopTui.Layout;
 namespace SlopTui.Styling;
 
 /// <summary>A <c>name: value</c> declaration. <see cref="Known"/> is false for an unsupported property.</summary>
-public sealed record Declaration(string Name, string Value, bool Known);
+public sealed record Declaration(string Name, string Value, bool Known)
+{
+    /// <summary>Whether this declares a custom property, which <c>var()</c> reads.</summary>
+    public bool IsCustom => StyleParser.IsCustomProperty(Name);
+}
 
 /// <summary>A rule and its position in the sheet.</summary>
 public sealed record StyleRule(IReadOnlyList<Selector> Selectors, IReadOnlyList<Declaration> Declarations, int Order);
 
 /// <summary>
-/// A parsed stylesheet: selector lists with type, class, id and focus
-/// selectors, descendant and child combinators, comments and declarations.
+/// A parsed stylesheet: selector lists, comments, custom properties and
+/// declarations. At-rules are skipped with a warning, and <c>!important</c>
+/// is accepted and ignored.
 /// </summary>
 /// <remarks>
-/// A bad value fails the parse with its line, selector and property. An
-/// unsupported property is kept but ignored, with a warning.
+/// A bad value fails the parse with its line, selector and property. A CSS
+/// property a terminal cannot draw is accepted and ignored; an unknown one is
+/// kept but ignored, with a warning.
 /// </remarks>
 public sealed class Stylesheet
 {
@@ -29,7 +35,7 @@ public sealed class Stylesheet
     /// <summary>The rules in source order.</summary>
     public IReadOnlyList<StyleRule> Rules { get; }
 
-    /// <summary>One line per ignored property.</summary>
+    /// <summary>One line for each thing the parser skipped.</summary>
     public IReadOnlyList<string> Warnings { get; }
 
     public string Source { get; }
@@ -52,6 +58,11 @@ public sealed class Stylesheet
             while (position < text.Length && char.IsWhiteSpace(text[position])) position++;
             if (position >= text.Length) break;
 
+            if (text[position] == '@')
+            {
+                position = SkipAtRule(text, position, warnings);
+                continue;
+            }
             rules.Add(ParseRule(text, ref position, rules.Count, warnings));
         }
         return new Stylesheet(rules, warnings, css);
@@ -102,28 +113,66 @@ public sealed class Stylesheet
 
     private static List<Declaration> ParseDeclarations(RuleBody body, List<string> warnings)
     {
-        var declarations = new List<Declaration>();
-        foreach (var declaration in body.Text.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        List<(string Name, string Value)> parsed;
+        try
         {
-            var colon = declaration.IndexOf(':');
-            if (colon < 0) throw body.Error($"'{declaration}' is not a 'name: value' declaration.");
+            parsed = StyleParser.ParseDeclarations(body.Text);
+        }
+        catch (FormatException ex)
+        {
+            throw body.Error(ex.Message, ex);
+        }
 
-            var name = declaration[..colon].Trim();
-            var value = declaration[(colon + 1)..].Trim();
-            if (name.Length == 0) throw body.Error("a declaration has no name.");
-
-            var known = StyleParser.IsStyleAttribute(name);
-            if (known)
+        var declarations = new List<Declaration>();
+        foreach (var (name, value) in parsed)
+        {
+            var isProperty = StyleParser.IsProperty(name);
+            var known = isProperty || StyleParser.IsIgnored(name) || StyleParser.IsCustomProperty(name);
+            // A value with var() can only be checked once the variables are known.
+            if (isProperty && !value.Contains("var(", StringComparison.OrdinalIgnoreCase))
             {
                 Validate(body, name, value);
             }
-            else
+            else if (!known)
             {
-                warnings.Add($"line {body.Line}: '{name}' in '{body.Selector}' is not a property this library draws; ignored.");
+                warnings.Add($"line {body.Line}: '{name}' in '{body.Selector}' is not a property this library knows; ignored.");
             }
             declarations.Add(new Declaration(name, value, known));
         }
         return declarations;
+    }
+
+    /// <summary>Skips a statement at-rule or a block at-rule and returns the position after it.</summary>
+    private static int SkipAtRule(string text, int start, List<string> warnings)
+    {
+        var end = text.IndexOfAny([';', '{'], start);
+        var name = text[start..(end < 0 ? text.Length : end)].Trim();
+        warnings.Add($"line {LineOf(text, start)}: '{name}' is an at-rule; skipped.");
+        if (end < 0) return text.Length;
+        if (text[end] == ';') return end + 1;
+
+        var close = MatchingBrace(text, end);
+        if (close < 0) throw new FormatException($"line {LineOf(text, start)}: '{name}' is not closed.");
+        return close + 1;
+    }
+
+    /// <summary>The index of the brace that closes the one at <paramref name="open"/>, or -1.</summary>
+    private static int MatchingBrace(string text, int open)
+    {
+        var depth = 0;
+        for (var i = open; i < text.Length; i++)
+        {
+            if (text[i] == '{')
+            {
+                depth++;
+            }
+            else if (text[i] == '}')
+            {
+                depth--;
+                if (depth == 0) return i;
+            }
+        }
+        return -1;
     }
 
     private static void Validate(RuleBody body, string name, string value)

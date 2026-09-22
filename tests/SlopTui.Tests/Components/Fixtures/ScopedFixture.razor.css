@@ -1,0 +1,2 @@
+.scoped { color: cyan; padding: 1 }
+.scoped ::deep .deep { text-decoration: underline }

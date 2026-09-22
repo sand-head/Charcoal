@@ -1,20 +1,11 @@
-@* A focusable counter that takes + and − while focused. *@
-<Box focusable="true" Border="BorderStyle.Round" BorderColor="@(_focused ? Color.Green : Color.BrightBlack)"
-     Padding="new Edges(0, 2)" FlexDirection="FlexDirection.Column" AlignItems="AlignItems.Center"
-     @onkeypress="OnKey" @onfocus="() => Focus(true)" @onblur="() => Focus(false)" @onclick="OnClick">
-    <Text Dim="!_focused">@Model.Name</Text>
-    <Text Bold="true" Color="@(_focused ? Color.Green : Color.Default)">@Model.Value</Text>
-</Box>
+@* A focusable counter that takes + and − while focused. :focus in the scoped sheet shows which one has the keyboard. *@
+<div class="counter" tabindex="0" @onkeypress="OnKey" @onclick="OnClick">
+    <div class="name">@Model.Name</div>
+    <div class="value">@Model.Value</div>
+</div>
 
 @code {
     [Parameter, EditorRequired] public App.CounterModel Model { get; set; } = default!;
-
-    private bool _focused;
-
-    private void Focus(bool gained)
-    {
-        _focused = gained;
-    }
 
     private void OnKey(KeyPressEventArgs e)
     {

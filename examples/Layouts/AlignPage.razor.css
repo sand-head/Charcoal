@@ -1,0 +1,4 @@
+.page { display: flex; flex: 1; gap: 1; padding: 0 1 }
+.panel { display: flex; flex-direction: column; flex: 1; border: solid bright-black }
+.label { opacity: 0.5; white-space: pre }
+.items { display: flex; flex: 1; gap: 1; padding: 0 1 }

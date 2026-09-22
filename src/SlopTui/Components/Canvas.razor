@@ -1,61 +1,26 @@
 @*
-    A leaf painted by the Paint delegate into a buffer clipped to its content
-    box. Call TuiApp.Invalidate() when what it draws changes without a re-render.
+    A canvas painted by the Paint delegate into a buffer clipped to its
+    content box. Call TuiApp.Invalidate() when what it draws changes without
+    a re-render. Size and place it with style or class, like any element.
 *@
-@inject CanvasRegistry Canvases
-@implements IDisposable
+@inject TuiApp Tui
 
-<canvas paint="@_key" @attributes="Attributes()"></canvas>
+<canvas @ref="_element" @attributes="AdditionalAttributes"></canvas>
 
 @code {
+    private ElementReference _element;
+
     [Parameter, EditorRequired] public Action<CellBuffer, Rect> Paint { get; set; } = default!;
-
-    private string? _key;
-
-    protected override void OnParametersSet()
-    {
-        _key ??= Canvases.NewKey();
-        Canvases.Register(_key, Paint);
-    }
-
-    public void Dispose()
-    {
-        if (_key is not null) Canvases.Unregister(_key);
-    }
-
-    [Parameter] public double? FlexGrow { get; set; }
-    [Parameter] public double? FlexShrink { get; set; }
-    [Parameter] public Length? Width { get; set; }
-    [Parameter] public Length? Height { get; set; }
-    [Parameter] public Length? MinWidth { get; set; }
-    [Parameter] public Length? MinHeight { get; set; }
-    [Parameter] public Edges? Padding { get; set; }
-    [Parameter] public Edges? Margin { get; set; }
-    [Parameter] public Color? Background { get; set; }
-    [Parameter] public BorderStyle? Border { get; set; }
-    [Parameter] public Color? BorderColor { get; set; }
 
     [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
 
-    private Dictionary<string, object> Attributes()
-    {
-        var attributes = new Dictionary<string, object>(AdditionalAttributes ?? new Dictionary<string, object>(), StringComparer.Ordinal);
-        Put(attributes, "flex-grow", FlexGrow);
-        Put(attributes, "flex-shrink", FlexShrink);
-        Put(attributes, "width", Width);
-        Put(attributes, "height", Height);
-        Put(attributes, "min-width", MinWidth);
-        Put(attributes, "min-height", MinHeight);
-        Put(attributes, "padding", Padding);
-        Put(attributes, "margin", Margin);
-        Put(attributes, "background", Background);
-        Put(attributes, "border", Border);
-        Put(attributes, "border-color", BorderColor);
-        return attributes;
-    }
+    /// <summary>The rendered canvas element, once there is one.</summary>
+    public HostElement? Element => Tui.Renderer.Element(_element);
 
-    private static void Put<T>(Dictionary<string, object> attributes, string name, T? value) where T : struct
+    protected override void OnAfterRender(bool firstRender)
     {
-        if (value is { } set) attributes[name] = set;
+        if (Element is not { } element || ReferenceEquals(element.Painter, Paint)) return;
+        element.Painter = Paint;
+        Tui.Invalidate();
     }
 }

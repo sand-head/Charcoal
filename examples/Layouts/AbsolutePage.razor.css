@@ -1,0 +1,4 @@
+.page { display: flex; flex: 1; padding: 0 1 }
+.frame { flex: 1; border: solid bright-black }
+.muted { opacity: 0.5; white-space: pre }
+.float { position: absolute; border: solid; border-radius: 1; padding: 0 1; white-space: nowrap }

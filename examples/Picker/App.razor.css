@@ -1,0 +1,3 @@
+.app { display: flex; flex-direction: column; gap: 1; padding: 1 2; height: 100% }
+.title { font-weight: bold }
+.list { width: 40; border: solid bright-black }

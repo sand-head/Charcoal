@@ -1,0 +1,12 @@
+.page { display: flex; flex-direction: column; flex: 1; gap: 1; padding: 0 1 }
+.row { display: flex; flex: 1; gap: 1 }
+.stack { display: flex; flex-direction: column; flex: 1; overflow: hidden; border: solid cyan; border-radius: 1 }
+.stack .heading { color: cyan; font-weight: bold; white-space: pre }
+.list { display: flex; flex-direction: column; flex: 1; overflow: hidden; justify-content: flex-end; padding: 0 1 }
+.line { white-space: pre }
+.side { display: flex; flex-direction: column; gap: 1; width: 34; border: solid yellow; border-radius: 1; padding: 0 1 }
+.side .heading { color: yellow; font-weight: bold }
+.pair { display: flex; gap: 1 }
+.blue { flex: 1; background: blue; color: white }
+.red { flex: 1; background: red; color: white }
+.muted { opacity: 0.5 }

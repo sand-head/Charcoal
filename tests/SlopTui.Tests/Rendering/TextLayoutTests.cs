@@ -209,4 +209,45 @@ public class TextLayoutTests
         var lines = TextLayout.Wrap([R("abc")], 0, TextWrap.Wrap);
         Assert.Single(lines);
     }
+
+    private static string Joined(List<TextRun> runs) => string.Concat(runs.Select(r => r.Text));
+
+    [Fact]
+    public void Normal_white_space_collapses_runs_of_space_and_drops_them_at_the_edges()
+    {
+        var runs = new List<TextRun> { R("  Hello \n   "), Bold("world"), R("  \t!  ") };
+        TextLayout.CollapseWhitespace(runs, WhiteSpace.Normal);
+        Assert.Equal("Hello world !", Joined(runs));
+        Assert.Equal(["Hello ", "world", " !"], runs.Select(r => r.Text));
+        Assert.Equal(TextStyle.Bold, runs[1].Style);
+    }
+
+    [Fact]
+    public void A_forced_break_survives_collapsing_and_the_space_around_it_goes()
+    {
+        var runs = new List<TextRun> { R("a "), TextRun.LineBreak(Color.Default, Color.Default, TextStyle.None), R(" b") };
+        TextLayout.CollapseWhitespace(runs, WhiteSpace.Normal);
+        Assert.Equal("a\nb", Joined(runs));
+        Assert.Equal(2, TextLayout.Wrap(runs, 10, TextWrap.Wrap).Count);
+    }
+
+    [Fact]
+    public void Pre_line_keeps_newlines_and_collapses_the_rest_and_pre_keeps_everything()
+    {
+        var runs = new List<TextRun> { R("  a  b \n  c ") };
+        TextLayout.CollapseWhitespace(runs, WhiteSpace.PreLine);
+        Assert.Equal("a b\nc", Joined(runs));
+
+        runs = [R("  a  b \n  c ")];
+        TextLayout.CollapseWhitespace(runs, WhiteSpace.Pre);
+        Assert.Equal("  a  b \n  c ", Joined(runs));
+    }
+
+    [Fact]
+    public void Whitespace_only_text_collapses_to_nothing()
+    {
+        var runs = new List<TextRun> { R("\n    "), R(" ") };
+        TextLayout.CollapseWhitespace(runs, WhiteSpace.NoWrap);
+        Assert.Empty(runs);
+    }
 }

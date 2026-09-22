@@ -1,0 +1,7 @@
+.page { display: flex; flex: 1; gap: 1; padding: 0 1; align-items: flex-start }
+.card { width: 24; padding: 1 2 }
+.heading { font-weight: bold }
+.card p { margin: 0 }
+/* The one-line modes: nowrap and hidden overflow, with text-overflow choosing how the cut is marked. */
+.overflow { display: flex; flex-direction: column; gap: 1; width: 30 }
+.overflow div { white-space: nowrap; overflow: hidden }

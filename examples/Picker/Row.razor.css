@@ -1,0 +1,2 @@
+.row { padding: 0 1; white-space: pre }
+.row.selected { background: cyan; color: black; font-weight: bold }

@@ -7,7 +7,7 @@ namespace SlopTui.Components;
 /// Parses the static HTML that Razor folds into a single markup frame, the
 /// job the DOM parser does for the browser renderer. It reads elements with
 /// quoted, unquoted or bare attributes, void and self-closing tags, comments,
-/// and text with entities.
+/// and text with entities. Whitespace is kept for <c>white-space</c> to handle.
 /// </summary>
 internal static class MarkupParser
 {
@@ -15,44 +15,6 @@ internal static class MarkupParser
     {
         "br", "hr", "img", "input", "meta", "link", "area", "base", "col", "embed", "source", "track", "wbr",
     };
-
-    /// <summary>
-    /// Collapses whitespace containing a line break to one space, or to
-    /// nothing at the start of a parent's content or before its end, as HTML
-    /// does. Text that is only whitespace is kept, so markup indentation can
-    /// still be told apart from a deliberate space. A line break is <c>&lt;br&gt;</c>.
-    /// </summary>
-    internal static string CollapseNewlines(string text, bool first = true, bool last = true)
-    {
-        if (text.AsSpan().IndexOfAny('\n', '\r') < 0) return text;
-        if (string.IsNullOrWhiteSpace(text)) return text;
-
-        var result = new StringBuilder(text.Length);
-        var i = 0;
-        while (i < text.Length)
-        {
-            if (!char.IsWhiteSpace(text[i]))
-            {
-                result.Append(text[i]);
-                i++;
-                continue;
-            }
-
-            var start = i;
-            while (i < text.Length && char.IsWhiteSpace(text[i])) i++;
-            var whitespace = text.AsSpan(start, i - start);
-            if (whitespace.IndexOfAny('\n', '\r') < 0)
-            {
-                result.Append(whitespace);
-                continue;
-            }
-
-            var atStart = start == 0 && first;
-            var atEnd = i == text.Length && last;
-            if (!atStart && !atEnd) result.Append(' ');
-        }
-        return result.ToString();
-    }
 
     /// <summary>The top-level nodes of the fragment, in order.</summary>
     public static List<HostNode> Parse(string markup, Func<string, HostElement> newElement) =>
@@ -84,7 +46,7 @@ internal static class MarkupParser
                 }
                 else if (NextIs('/'))
                 {
-                    FlushText(beforeClose: true);
+                    FlushText();
                     if (!ReadClosingTag()) break;
                 }
                 else if (NextIs(char.IsLetter) || NextIs('_'))
@@ -98,7 +60,7 @@ internal static class MarkupParser
                     _position++;
                 }
             }
-            FlushText(beforeClose: true);
+            FlushText();
             return _roots;
         }
 
@@ -202,12 +164,10 @@ internal static class MarkupParser
 
         private void SkipWhitespace() => ReadWhile(char.IsWhiteSpace);
 
-        private void FlushText(bool beforeClose = false)
+        private void FlushText()
         {
             if (_text.Length == 0) return;
-            var first = _open.TryPeek(out var parent) ? parent.Children.Count == 0 : _roots.Count == 0;
-            var text = CollapseNewlines(_text.ToString(), first, beforeClose);
-            Add(new HostTextNode { Text = WebUtility.HtmlDecode(text) });
+            Add(new HostTextNode { Text = WebUtility.HtmlDecode(_text.ToString()) });
             _text.Clear();
         }
 

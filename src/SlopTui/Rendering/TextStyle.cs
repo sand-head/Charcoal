@@ -17,6 +17,15 @@ public enum TextStyle : byte
 public readonly record struct TextRun(string Text, Color Foreground, Color Background, TextStyle Style)
 {
     public TextRun(string text) : this(text, Color.Default, Color.Default, TextStyle.None) { }
+
+    /// <summary>
+    /// Whether this run is a forced line break from <c>&lt;br&gt;</c>, which
+    /// survives the whitespace collapsing that removes typed newlines.
+    /// </summary>
+    public bool Break { get; init; }
+
+    public static TextRun LineBreak(Color foreground, Color background, TextStyle style) =>
+        new("\n", foreground, background, style) { Break = true };
 }
 
 /// <summary>A layout leaf whose content is styled text.</summary>

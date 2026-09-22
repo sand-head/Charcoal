@@ -1,13 +1,13 @@
-<Box FlexDirection="FlexDirection.Column" FlexGrow="1" Gap="1" Padding="new Edges(0, 1)">
-    @foreach (var justify in Enum.GetValues<JustifyContent>())
+<div class="page">
+    @foreach (var justify in new[] { "flex-start", "center", "flex-end", "space-between", "space-around", "space-evenly" })
     {
-        <Box Border="BorderStyle.Single" BorderColor="Color.BrightBlack" Padding="new Edges(0, 1)" Gap="1">
-            <Box Width="18"><Text Dim="true">@justify</Text></Box>
-            <Box FlexGrow="1" JustifyContent="justify" Gap="1">
+        <div class="line">
+            <div class="label">@justify</div>
+            <div class="items" style="justify-content: @justify">
                 <Chip Label="A" />
-                <Chip Label="BB" Background="Color.Green" Foreground="Color.Black" />
-                <Chip Label="CCC" Background="Color.Red" />
-            </Box>
-        </Box>
+                <Chip Label="BB" Style="background: green; color: black" />
+                <Chip Label="CCC" Style="background: red" />
+            </div>
+        </div>
     }
-</Box>
+</div>

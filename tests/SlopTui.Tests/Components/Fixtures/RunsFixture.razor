@@ -1,16 +1,21 @@
-@using SlopTui.Rendering
-<Text>
-    <Run Color="Color.Red">one</Run>
-    <Run>  two</Run>
-    <Run>@("  three")</Run>
+@* Spans on separate, indented lines. The first div keeps its whitespace, as a pre would. *@
+<div id="pre" style="white-space: pre-wrap">
+    <span style="color: red">one</span>
+    <span>  two</span>
+    <span>@("  three")</span>
     @if (Show)
     {
-        <Run> four</Run>
+        <span> four</span>
     }
-</Text>
-<Text>
-    <Run>a</Run><Newline /><Run>b</Run>
-</Text>
+</div>
+<div id="normal">
+    <span style="color: red">one</span>
+    <span>  two</span>
+    <span>@("  three")</span>
+</div>
+<div id="break">
+    <span>a</span><br /><span>b</span>
+</div>
 
 @code {
     [Parameter] public bool Show { get; set; } = true;

@@ -5,45 +5,86 @@ using SlopTui.Rendering;
 namespace SlopTui.Styling;
 
 /// <summary>
-/// Resolves an element's style: matching rules by specificity, sheet and
-/// order, then the element's own attributes, then inheritance.
+/// Resolves an element's style: the user-agent sheet, then the app's sheets
+/// by specificity, sheet and order, then its inline <c>style</c>, then what it
+/// inherits from its parent.
 /// </summary>
 /// <remarks>
-/// A <c>text</c> element without a colour takes its nearest ancestor's, and
-/// text-style flags accumulate down the tree.
+/// As in CSS, <c>color</c>, the text flags, <c>white-space</c>,
+/// <c>text-align</c> and custom properties inherit unless the element sets
+/// them. Every element inherits them, so a box carries the look of its text.
 /// </remarks>
 public static class StyleResolver
 {
     public static Style Resolve(HostElement element, IReadOnlyList<Stylesheet> sheets, HostElement? focused)
     {
-        var style = element.BaseStyle;
-        foreach (var rule in MatchingRules(element, sheets, focused))
+        var parent = element.Parent?.ClosestElement?.Node.Style;
+        var declarations = CascadedDeclarations(element, sheets, focused);
+        var custom = CustomProperties(declarations, parent?.CustomProperties ?? Style.NoCustomProperties);
+
+        var style = Style.Default with { CustomProperties = custom };
+        foreach (var (name, value) in declarations)
         {
-            foreach (var declaration in rule.Declarations)
+            if (StyleParser.IsCustomProperty(name)) continue;
+            if (StyleParser.Substitute(value, key => custom.GetValueOrDefault(key)) is { } resolved)
             {
-                if (declaration.Known) style = StyleParser.Apply(style, declaration.Name, declaration.Value);
+                style = StyleParser.Apply(style, name, resolved);
             }
         }
-        style = element.ApplyOwnAttributes(style);
-        return Inherit(element, style);
+        return Inherit(style, parent);
     }
 
     public static bool Matches(HostElement element, Selector selector, HostElement? focused = null) =>
         selector.Matches(element, focused);
 
-    /// <summary>The rules that match, lowest precedence first.</summary>
+    /// <summary>The declarations of every matching rule in cascade order, then the inline style's.</summary>
+    private static List<(string Name, string Value)> CascadedDeclarations(HostElement element, IReadOnlyList<Stylesheet> sheets, HostElement? focused)
+    {
+        var declarations = new List<(string Name, string Value)>();
+        foreach (var rule in MatchingRules(element, sheets, focused))
+        {
+            foreach (var declaration in rule.Declarations)
+            {
+                if (declaration.Known) declarations.Add((declaration.Name, declaration.Value));
+            }
+        }
+        if (element.InlineStyle is { } css) declarations.AddRange(StyleParser.ParseDeclarations(css));
+        return declarations;
+    }
+
+    /// <summary>The inherited custom properties with the element's own declared over them.</summary>
+    private static IReadOnlyDictionary<string, string> CustomProperties(
+        List<(string Name, string Value)> declarations, IReadOnlyDictionary<string, string> inherited)
+    {
+        Dictionary<string, string>? own = null;
+        foreach (var (name, value) in declarations)
+        {
+            if (!StyleParser.IsCustomProperty(name)) continue;
+            own ??= new Dictionary<string, string>(inherited, StringComparer.Ordinal);
+            own[name] = value;
+        }
+        return own ?? inherited;
+    }
+
+    /// <summary>The rules that match, lowest precedence first, starting with the user-agent sheet's.</summary>
     private static IEnumerable<StyleRule> MatchingRules(HostElement element, IReadOnlyList<Stylesheet> sheets, HostElement? focused)
     {
         var matched = new List<(int Specificity, int Sheet, int Order, StyleRule Rule)>();
-        for (var sheet = 0; sheet < sheets.Count; sheet++)
+        void Collect(Stylesheet sheet, int sheetIndex)
         {
-            foreach (var rule in sheets[sheet].Rules)
+            foreach (var rule in sheet.Rules)
             {
                 if (HighestMatchingSpecificity(rule, element, focused) is { } specificity)
                 {
-                    matched.Add((specificity, sheet, rule.Order, rule));
+                    matched.Add((specificity, sheetIndex, rule.Order, rule));
                 }
             }
+        }
+
+        Collect(UserAgentStylesheet.Sheet, -1);
+        for (var sheet = 0; sheet < sheets.Count; sheet++)
+        {
+            Collect(sheets[sheet], sheet);
         }
         matched.Sort((a, b) => (a.Specificity, a.Sheet, a.Order).CompareTo((b.Specificity, b.Sheet, b.Order)));
         return matched.Select(m => m.Rule);
@@ -62,23 +103,17 @@ public static class StyleResolver
         return highest;
     }
 
-    /// <summary>Gives a text element its ancestors' colour and text-style flags.</summary>
-    internal static Style Inherit(HostElement element, Style style)
+    /// <summary>Takes the inherited properties from the parent, except those the element set itself.</summary>
+    public static Style Inherit(Style style, Style? parent)
     {
-        if (!element.IsText) return style;
-        var color = style.Color;
-        var flags = style.TextStyle;
-        for (var ancestor = element.Parent?.ClosestElement; ancestor is not null; ancestor = ancestor.Parent?.ClosestElement)
-        {
-            var ancestorStyle = ancestor.Node.Style;
-            if (color.Kind == ColorKind.Default && ancestorStyle.Color.Kind != ColorKind.Default)
-            {
-                color = ancestorStyle.Color;
-            }
-            flags |= ancestorStyle.TextStyle;
-        }
+        if (parent is null) return style;
+        var color = style.Set.HasFlag(StyleSet.Color) ? style.Color : parent.Color;
+        var flags = (parent.TextStyle & ~style.TextStyleReset) | style.TextStyle;
+        var whiteSpace = style.Set.HasFlag(StyleSet.WhiteSpace) ? style.WhiteSpace : parent.WhiteSpace;
+        var align = style.Set.HasFlag(StyleSet.TextAlign) ? style.TextAlign : parent.TextAlign;
 
-        var unchanged = color == style.Color && flags == style.TextStyle;
-        return unchanged ? style : style with { Color = color, TextStyle = flags };
+        var unchanged = color == style.Color && flags == style.TextStyle && whiteSpace == style.WhiteSpace && align == style.TextAlign;
+        if (unchanged) return style;
+        return style with { Color = color, TextStyle = flags, WhiteSpace = whiteSpace, TextAlign = align };
     }
 }

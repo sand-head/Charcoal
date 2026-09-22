@@ -1,0 +1,4 @@
+/* white-space: pre keeps the spaces the user types, so the caret column is the text column. */
+.composer { border: solid bright-black; border-radius: 1; padding: 0 1; white-space: pre; overflow: hidden }
+.composer:focus { border-color: green }
+.prompt { color: green }

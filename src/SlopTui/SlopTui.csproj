@@ -16,6 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="build/SlopTui.targets" Pack="true" PackagePath="build;buildTransitive" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="SlopTui.Tests" />
   </ItemGroup>
 

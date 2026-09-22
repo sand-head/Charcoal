@@ -1,9 +1,9 @@
 # sloptui design
 
 sloptui renders Blazor components to a terminal. Components are `.razor`
-files reconciled by Blazor's own `Renderer`; the library lays them out with
-flexbox on a grid of terminal cells, paints them into a cell buffer, and
-writes the difference from the previous frame to the terminal.
+files reconciled by Blazor's own `Renderer`; the library styles them with
+CSS, lays them out on a grid of terminal cells, paints them into a cell
+buffer, and writes the difference from the previous frame to the terminal.
 
 The component model is Blazor's. Everything after the render tree belongs to
 this library.
@@ -30,8 +30,8 @@ this library.
 | `SlopTui.Rendering` | `Color`, `TextStyle`, `TextRun`, `Cell`, `CellBuffer`, `Screen` (diff → ANSI), `TextWidth`, `TextLayout` (wrapping), `Painter`, `ITextContent`, `ICustomPaint` | `SlopTui.Layout` for `Rect`/`Style` |
 | `SlopTui.Input` | `Key`, `KeyModifiers`, `KeyEvent`, `MouseEvent`, `PasteEvent`, `FocusEvent`, `AnsiKeyParser`, `InputPump` | nothing |
 | `SlopTui.Terminal` | `ITerminal`, `ConsoleTerminal` (Unix termios + Windows VT), `HeadlessTerminal`, `TerminalOptions` | `SlopTui.Layout` for `Size` |
-| `SlopTui.Styling` | `Stylesheet`, `Selector`, `StyleResolver`, `StyleContext` — a CSS subset over the same properties | `SlopTui.Layout`, `SlopTui.Components` (the host tree it matches) |
-| `SlopTui.Components` | `TerminalRenderer`, `TerminalDispatcher`, host tree, `TuiApp`, `Box`, `Text`/`Run`, `Canvas`, `ScrollBox`, `Spacer`, `Newline`, focus, event args, `EventHandlers` | everything above |
+| `SlopTui.Styling` | `Stylesheet`, `Selector`, `StyleResolver`, `StyleContext`, `UserAgentStylesheet`: the cascade | `SlopTui.Layout`, `SlopTui.Components` (the host tree it matches) |
+| `SlopTui.Components` | `TerminalRenderer`, `TerminalDispatcher`, host tree, `MarkupParser`, `TuiApp`, `ScrollBox`, `Canvas`, focus, event args, `EventHandlers` | everything above |
 
 Rules between the layers:
 
@@ -50,80 +50,84 @@ attributes, components, regions. The browser renderer applies those edits to
 the DOM through a "logical element" layer where components and regions are
 containers that do not exist in the DOM. The host tree does the same:
 
-- `HostNode` — base: `Parent`, logical `Children`.
-- `HostElement : HostNode, LayoutNode` — a named element (`box`, `text`,
-  `canvas`) with attributes. Its *layout* children are its logical descendants
-  with containers flattened out.
-- `HostTextNode : HostNode` — a text frame. It is not a layout node; the
-  nearest `text` element ancestor collects its runs.
-- `HostContainer : HostNode` — a component or region. Transparent to layout.
+- `HostNode`: the base, with `Parent` and logical `Children`.
+- `HostElement : HostNode`: an element named as written (`div`, `span`,
+  `img` …) with its attributes and resolved style. Its `Node` is the
+  `LayoutNode` the engine sees, whose children are the element's logical
+  descendants with containers flattened out and inline content grouped
+  into anonymous text leaves.
+- `HostTextNode : HostNode`: a text frame, collected into a text leaf by
+  the block it stands in.
+- `HostContainer : HostNode`: a component or region, transparent to layout.
 
-Edits are applied exactly as `BrowserRenderer.ts` does: `PrependFrame`,
+Edits are applied as `BrowserRenderer.ts` applies them: `PrependFrame`,
 `RemoveFrame`, `SetAttribute`, `RemoveAttribute`, `UpdateText`, `StepIn`,
 `StepOut`, `PermutationListEntry/End`; sibling indices count *logical*
 children.
 
-## Elements and attributes
+## Elements
 
-Three element names. Attribute names are kebab-case CSS names. Blazor passes
-element attribute values as strings, so every typed value (`Edges`, `Length`,
-`Color`, the enums) has a `ToString` that `StyleParser` reads back. A `bool`
-arrives as itself, and `false` omits the attribute.
+The element names are HTML's. Any name renders, and what it is comes from
+the cascade, as on a page. The user-agent stylesheet (`UserAgentStylesheet`)
+makes `div`, `p`, `section`, `h1`–`h6`, `ul`, `li`, `pre`, `blockquote`,
+`hr`, `img`, `canvas` and the other block elements `display: block`; makes
+headings, `strong`, `b` and `th` bold and `em`, `i`, `cite` and `var`
+italic; underlines `u`, strikes through `s` and `del`, and shows `mark` black
+on yellow; keeps whitespace in `pre`; gives paragraphs, headings, lists and
+quotes a `margin-block` of one row; indents `blockquote`, `dd` and lists;
+draws a top border on `hr`; and hides `[hidden]`. Every other element is
+`display: inline`, the CSS initial value, so an unknown tag is a styled run
+of the text around it. Unlike a browser's sheet, `body` has no margin and
+`img` and `canvas` are blocks. A stylesheet can change any of it.
 
-**`box`** — a flex or grid container. Layout attributes: `display`
-(flex|grid|none), `flex-direction` (row|column|row-reverse|column-reverse),
-`flex-wrap` (nowrap|wrap|wrap-reverse), `justify-content`
-(flex-start|center|flex-end|space-between|space-around|space-evenly),
-`align-items` / `align-self` (stretch|flex-start|center|flex-end),
-`align-content` (stretch|flex-start|center|flex-end|space-between|space-around),
-`justify-items` (grid), `flex-grow`, `flex-shrink`, `flex-basis`, the `flex`
-shorthand, `width`, `height`, `min-width`, `min-height`, `max-width`,
-`max-height` (cells, `N%`, or `auto`), `padding`,
-`padding-{top,right,bottom,left}`, `padding-x`, `padding-y`, `margin*`
-likewise, `gap`, `row-gap`, `column-gap`, `overflow` (visible|hidden|scroll),
-`scroll-x`, `scroll-y`, `position` (relative|absolute), `top`, `right`,
-`bottom`, `left`, `grid-template-columns`, `grid-template-rows`,
-`grid-column`, `grid-row`, `grid-{column,row}-{start,end,span}`, plus
-`class` and `id` for stylesheets. Visual attributes: `background` (a colour), `border`
-(none|single|double|round|bold|classic), `border-color`,
-`border-{top,right,bottom,left}` (booleans, default all on when a border is
-set). `style="…"` takes the same properties as inline CSS text.
+What an element does with its children follows its `display`:
 
-**`text`** — a leaf for layout, wrapped to its width. Visual attributes:
-`color`, `background`, `bold`, `dim`, `italic`, `underline`, `inverse`,
-`strikethrough`, `wrap` (wrap|truncate|truncate-start|truncate-middle|clip).
-It also takes the box layout attributes that make sense for a flex item
-(`flex-*`, `width`, `height`, `min-*`, `max-*`, `margin*`, `padding*`,
-`align-self`). A `text` nested in a `text` is a styled run inheriting the
-outer style; it is not a layout node. `"\n"` inside text is a line break.
-The HTML inline tags are text elements with a preset: `strong`/`b` bold,
-`em`/`i` italic, `u` underline, `s`/`del`/`strike` strikethrough, `mark`
-inverse, `span` nothing, and `br` a line break. Sheets and attributes apply
-on top of the preset, and type selectors match the tag as written, so
-`strong { color: red }` matches `<strong>` and no other bold run.
+- **Block** (and inline, when the engine is handed an inline element):
+  children stack top to bottom, each as wide as the content box unless it
+  has a `width` (`fit-content` hugs the content). Vertical margins between
+  neighbours collapse to the larger one, and a first or last child's margin
+  collapses through a container that has no border or padding on that side.
+- **Flex** and **grid**: the algorithms below, with the children as items.
+- **Inline**: not a box. Inline elements and the text around them, directly
+  under a block, are grouped into an anonymous text leaf
+  (`AnonymousTextNode`), as CSS wraps a block's inline content in anonymous
+  boxes. The leaf wraps as one text in the block's inherited text
+  properties, with each run in its own element's look, and stays current
+  when its text changes or an ancestor restyles. A `br` is a forced line
+  break. Whitespace follows the block's `white-space`: under `normal` runs
+  of spaces, tabs and newlines, including the indentation between elements
+  written on separate lines, collapse to one space and disappear at line
+  ends, so an input that must keep typed spaces needs `white-space: pre`.
+  Whitespace alone between two blocks makes no leaf.
+- **None**: out of layout and paint.
 
-Bare text under a box is laid out too. Each run of text nodes and inline
-tags directly under a box becomes an anonymous text leaf
-(`AnonymousTextNode`), as CSS wraps inline content in an anonymous box. It
-wraps as one text, takes the colour and flags a `text` child would inherit
-and the box's `wrap` mode, and stays current when its text changes or an
-ancestor restyles. Markup formatting makes no leaf: in a markup frame,
-whitespace with a line break collapses to one space inside the text and to
-nothing at its ends, and the leaf trims spaces at its own edges. A line
-break is `<br>`, `<Newline />` or a `"\n"` in a value. The HTML block tags
-(`div`, `p`, `section`, `article`, `main`, `header`, `footer`, `nav`,
-`aside`, `ul`, `ol`, `li`, `pre`, `blockquote`, `h1`–`h6`) are boxes whose
-children stack, and headings are bold.
+Razor compiles static HTML into a single *markup* frame. The browser
+renderer hands such a frame to the DOM parser; `MarkupParser` does the same
+here, reading elements with quoted, unquoted or bare attributes, void and
+self-closing tags, comments, entities, and text as written. Its nodes go in
+a container and are restyled when the container is inserted, so they
+resolve against their real ancestors.
 
-**`img`** — a leaf showing a decoded picture (`ImageLayoutNode`). `src` is
+Attributes are HTML's: `class`, `id`, `style`, `tabindex`, `src`, `alt`,
+`hidden`, `width` and `height` on `img` (applied where the cascade sets no
+size), and the event attributes. `@ref` works: the renderer records each
+captured reference, and `TerminalRenderer.Element(ref)` returns the
+`HostElement`. Components use it to reach an element's state, such as a
+scroll position (`node.ScrollTop`) or a canvas painter (`element.Painter`),
+where a page would use JavaScript interop. The one attribute HTML does not
+have is `caret="col,row"`, which places the terminal's cursor in the
+focused element's content box.
+
+**`img`** is a leaf showing a decoded picture (`ImageLayoutNode`). `src` is
 a file path or a `data:` URI; `ImageDecoder` uses StbImageSharp, and a
-failure shows the `alt` text instead. Sizing assumes an 8×16-pixel cell:
-without a size the image is `ceil(px/8)` × `ceil(px/16)` cells, shrunk to
-the available width with its shape kept; one given side sets the other from
-the aspect ratio, and two given sides stretch it. `ImagePainter` paints two
-pixel rows per cell with the upper-half block, in truecolour, and leaves a
-mostly transparent sample's cell alone. The available height is ignored,
-because it differs between the unbounded hypothetical measure and the final one.
+failure shows the `alt` text instead. Sizing assumes an 8×16-pixel cell
+until the terminal reports its own: without a size the image is
+`ceil(px/8)` × `ceil(px/16)` cells, shrunk to the available width with its
+shape kept; one given side sets the other from the aspect ratio, and two
+given sides stretch it. `ImagePainter` paints two pixel rows per cell with
+the upper-half block, in truecolour, and leaves a mostly transparent
+sample's cell alone. The available height is ignored, because it differs
+between the unbounded hypothetical measure and the final one.
 
 **Full-resolution pictures.** Before its first frame the app sends the kitty
 graphics query (a one-pixel image with `a=q`), XTWINOPS 16 for the cell size
@@ -141,53 +145,101 @@ their foreground colour. The terminal draws the picture over exactly those
 cells, so clipping, scrolling and overlap need nothing beyond the cell diff.
 A transmission goes out in the same write as the frame that first uses it,
 and every image is deleted on exit. Ids carry a per-process high byte so two
-apps in one terminal do not replace each other's pictures.
+apps in one terminal do not replace each other's pictures. Sixel and iTerm2
+images are not supported, since neither is tied to cells.
 
-**`canvas`** — a leaf painted by a delegate. The `Canvas` component
-registers its `Paint` delegate in the `CanvasRegistry` service and puts the
-registry key in the element's `paint` attribute, since an element attribute
-cannot hold a delegate. It takes the flex-item layout attributes.
+**`canvas`** is a leaf painted by a delegate on the element (`Painter`). The
+`Canvas` component captures its element with `@ref` and sets the delegate
+after each render, so a component can draw a whole region, such as a chart,
+without a node per cell. It is sized and placed by style like any element.
 
-Colours: `default`, the sixteen ANSI names (`black … white`,
-`bright-black … bright-white`), `#rrggbb`, `rgb(r,g,b)`, `ansi(n)` for the
-256-colour index. See `Color.Parse`.
+## Styles
 
-Lengths: an integer is cells; `50%` is a percentage of the parent's content
-box on that axis; `auto` means "from content".
+Every property is a CSS property under its CSS name, measured in cells where
+a page uses pixels: `padding: 1 2` is one row and two columns. `ch`, `em`,
+`rem` and `lh` are accepted and also mean cells; `px` is refused.
+`StyleParser` turns declarations into `Style`, the CSS subset the engine and
+the painter read:
+
+- Layout: `display` (`block`, `inline`, `flex`, `grid`, `none`; the
+  `inline-*` forms map to their block-level versions), `position`,
+  `top`/`right`/`bottom`/`left`, `width`/`height`/`min-*`/`max-*` (cells,
+  `N%`, `auto`, `fit-content`), `padding` and `margin` with the physical and
+  logical longhands, `gap`/`row-gap`/`column-gap`, `overflow` (`visible`,
+  `hidden`, `scroll`/`auto`; the `-x` and `-y` forms set the same value),
+  `visibility`, the flex properties with the `flex` and `flex-flow`
+  shorthands, and the grid template and placement properties.
+- Box: `background`/`background-color`; the `border` and `border-{side}`
+  shorthands (a width, a style and a colour in any order);
+  `border-style` and `border-{side}-style` (`none`, `solid`, `double`,
+  `dashed`, `dotted`); `border-width` (`thin` and `medium` draw a single
+  line, `thick` a heavy one); `border-color` (the text colour when unset);
+  and `border-radius`, where any radius rounds a solid border's corners.
+- Text, inherited: `color`, `font-weight` (`bold` and 600 or more are bold,
+  `lighter` and below 400 dim), `font-style`, `text-decoration`
+  (`underline`, `line-through`, `none`), `opacity` (below 1 is dim),
+  `filter` (`invert()` of half or more swaps the colours), `white-space`
+  and `text-align`. `text-overflow` is not inherited: `ellipsis` cuts the
+  end, `ellipsis clip` the start and `ellipsis ellipsis` the middle.
+- Custom properties (`--name`) and `var(--name, fallback)`. An undefined
+  variable without a fallback drops the declaration, as in CSS.
+- Properties a terminal cannot draw, such as `font-family`, `line-height`,
+  `box-shadow`, `transition` and `z-index`, are accepted and ignored. Any
+  other unknown name is an error inline and a warning in a sheet. A bad
+  value for a known property is always an error.
+
+Colours (`Color.Parse`): the sixteen palette names (`red`, `bright-blue`,
+`gray`) follow the terminal's theme; the other CSS names (`gold`,
+`rebeccapurple` …) are exact sRGB; `#rgb`, `#rrggbb`, `rgb(r, g, b)`,
+`ansi(n)`; and `currentcolor`, `transparent` and `default` mean the
+terminal's own colour.
+
+The text properties inherit into every element, as in CSS, so a box carries
+the look its text will have and an anonymous leaf needs only its block's
+style. Flags that an element turns off stay off, so `font-weight: normal`
+under a bold parent is normal (`Style.TextStyleReset`). Backgrounds,
+borders, sizes and layout properties do not inherit.
 
 ## Stylesheets
 
-Styles can be set inline, as attributes or `style="…"`, or for the whole
-app with `TuiApp.AddStylesheet(css)` and the `Stylesheets` list.
-`SlopTui.Styling.Stylesheet.Parse` reads a CSS subset:
+Styles come from `style="…"` on an element, from global sheets
+(`TuiApp.AddStylesheet(css)`), and from component-scoped sheets. The cascade
+(`StyleResolver`) is CSS's without `!important`: the user-agent sheet, then
+the app's sheets ordered by specificity (ids; then classes, attributes and
+pseudo-classes; then types), sheet order and rule order, with the last
+winning; then the inline style. A selector list counts the specificity of
+the selector that matched.
 
-- Selectors: a type (`box`, `text`, `canvas`, `*`), `.class`, `#id`,
-  `:focus` (the focused element), `:focus-within` (an ancestor of it), in
-  compounds; the descendant (space) and child (`>`) combinators; lists with
-  commas. Component boundaries are transparent to combinators.
-- Declarations: the same property names the attributes take, kebab-case.
-  An unknown property is kept and reported in `Warnings`; a bad value is a
-  `FormatException` at parse time naming the line, selector and property.
-- The cascade is CSS's: specificity (ids, then classes and pseudo-classes,
-  then types), then sheet order, then rule order, last wins; a selector list
-  contributes the specificity of the selector that matched. The element's
-  own attributes beat every rule, and `style="…"` beats the attributes
-  beside it.
-- Inheritance runs with or without a sheet: a `text` whose colour resolved
-  to `default` takes the nearest ancestor element's non-default colour, and
-  the text-style flags of every ancestor OR in. `wrap` does not inherit;
-  boxes inherit nothing.
-- Elements carry `class` (whitespace-separated) and `id`. A change to
-  either, or to an element's resolved colour or flags, re-resolves its
-  descendants; siblings are left alone. Adding or removing a sheet
-  re-resolves everything. A focus change re-resolves the old and new
-  focus paths, and a focused element's subtree when a sheet has a focus
-  pseudo-class left of a combinator.
+`Stylesheet.Parse` reads selector lists; compounds of a type (`div`, `*`),
+`.class`, `#id`, `[name]`, `[name=value]`, `:focus`, `:focus-within`,
+`:root`, `:first-child` and `:last-child`; the descendant and child
+combinators, which see through components; comments; and declarations.
+At-rules such as `@import`, `@media` and `@layer` are skipped with a warning
+in `Warnings`, as are unknown properties. A bad value throws a
+`FormatException` naming the line, selector and property.
+
+**Scoped stylesheets** are Blazor's own. For a `Component.razor.css` beside a
+component, the Razor SDK stamps a `b-…` attribute on that component's
+elements, rewrites the sheet's selectors to match it (`::deep` included),
+and bundles the project's sheets into
+`obj/…/projectbundle/<Project>.bundle.scp.css`. A web page links the bundle;
+here `build/SlopTui.targets` embeds it in the assembly, and `TuiApp.Run`
+loads the bundle of every non-framework assembly the app uses, dependencies
+first, with `AddScopedStylesheets`. To the host tree the scope is an
+ordinary attribute, matched by an ordinary attribute selector.
+
+Styles are re-resolved as narrowly as possible. An attribute change
+re-resolves the element and its descendants, whose selectors may test it;
+an inherited property change reaches the descendants; siblings are never
+touched. A focus change re-resolves the old and new focus paths, and their
+subtrees only when a sheet has a focus pseudo-class left of a combinator.
+Adding or removing a sheet re-resolves everything. The renderer resolves
+each new element once, when it is inserted.
 
 ## Layout
 
-Measure/arrange, not a single Yoga pass, because a terminal is integers and
-the subset is small:
+Layout is a measure pass and an arrange pass, rather than Yoga's single
+pass, because a terminal works in integers and the property set is small:
 
 - `Measure(node, availableWidth?, availableHeight?) → Size` computes the
   node's intrinsic size under constraints. A leaf answers from
@@ -201,7 +253,8 @@ the subset is small:
   min/max clamping with the freeze loop; then justify-content and gaps.
   Cross-axis sizes come from explicit size, `stretch`, or content; align
   offsets after.
-- `Layout(root, viewport)` = `Measure` then `Arrange` from `(0,0,viewport)`.
+- `Layout(root, viewport)` is `Measure` and then `Arrange` from
+  `(0,0,viewport)`.
 - `display: none` removes a node from flow and paint. `position: absolute`
   removes it from flow and places it by its offsets inside the parent's
   padding box.
@@ -225,11 +278,20 @@ the subset is small:
   cursor. `grid-column` and `grid-row` accept `2`, `2 / 4`, `span 2` and
   `2 / span 2`. `justify-items`, `align-items` and `align-self` place an
   item in its area, and `align-content` spends leftover height.
+- **Block layout** (`display: block`): children stack, stretched to the
+  content width unless sized, with vertical margins collapsed between
+  neighbours and through a container's unpadded edges.
+  `MarginTopThrough` and `MarginBottomThrough` carry a collapsed margin up
+  to the parent; nothing collapses out of a flex item, a grid item or the
+  root. A block's own content width is its widest child's, so a block that
+  is a flex item takes its max-content size. A percentage height resolves
+  only against a definite container height.
 - **Scrolling.** A box with `overflow: scroll` or `hidden` shifts its
-  children by `scroll-x` and `scroll-y` and records its `ContentSize`. The
-  engine does not clamp the offsets; the `ScrollBox` component does, and
-  handles the arrow and page keys, the wheel, `ScrollTop` and
-  `StickToBottom`.
+  children by the node's `ScrollTop` and `ScrollLeft`, which are set through
+  `@ref` as in the DOM, and records its `ContentSize`. The engine does not
+  clamp the offsets, and changing one re-arranges without re-measuring. The
+  `ScrollBox` component clamps them and handles the arrow and page keys,
+  the wheel, `ScrollTop` and `StickToBottom`.
 - A container's cross size is measured with its items at their final main
   sizes, so a row is as tall as its rewrapped text.
 - When content overflows, `justify-content: flex-end` keeps the end in
@@ -245,10 +307,14 @@ its ancestors; siblings answer from their cache.
 
 ## Painting and flushing
 
-`Painter.Paint(root, buffer)` walks the arranged tree depth-first: fill the
-box background if set, draw the border, then paint children clipped to the
-box's padding box unless `overflow: visible`. Text paints its wrapped lines
-(`TextLayout`), a canvas calls its delegate with a buffer clipped to its rect.
+`Painter.Paint(root, buffer)` walks the arranged tree depth-first. For each
+box it fills the background if one is set, draws the border in its
+`border-color` or the text colour, and paints the children, clipped to the
+padding box unless `overflow` is visible; `visibility: hidden` skips a
+subtree. A text leaf paints its wrapped lines (`TextLayout`) aligned by
+`text-align`, each run in its element's look, and a cluster without a
+background keeps the fill beneath it. A canvas calls its delegate with a
+buffer clipped to its rect.
 
 `Screen` holds two `CellBuffer`s, shown and back. `Flush()` compares rows by
 hash, repaints only the span between the first and last differing cells of a
@@ -268,14 +334,16 @@ on the app loop and ticks it so a pending ESC expires.
 
 Routing on the app loop: a key goes to the focused element's `@onkeypress`,
 then bubbles to each ancestor's, then to the root's; the first handler that
-sets `Handled` stops it. Focus lives in `FocusManager`: elements with
-`focusable="true"` are registered in tree order; `Tab` and `Shift+Tab` move
-it unless a handler took the key. Mouse events hit-test the arranged tree and
-dispatch `@onclick` (and `@onmouse` for everything else) from the deepest
-element outward. `@onfocus` / `@onblur` fire on change.
+sets `Handled` stops it. Focus lives in `FocusManager`: an element with a
+`tabindex` can take focus, and one with a non-negative `tabindex` is in the
+Tab cycle, in tree order. `Tab` and `Shift+Tab` move focus unless a handler
+took the key. Mouse events hit-test the arranged tree and dispatch `@onclick`
+(and `@onmouse` for everything else) from the deepest box outward; a left
+click focuses the nearest focusable element. `@onfocus` / `@onblur` fire on
+change.
 
 Event names and argument types are declared in `EventHandlers` with
-`[EventHandler]`, exactly as `Microsoft.AspNetCore.Components.Web` declares the
+`[EventHandler]`, as `Microsoft.AspNetCore.Components.Web` declares the
 DOM's, so Razor type-checks handlers.
 
 ## The app loop
@@ -294,7 +362,9 @@ message lands on a readable screen.
 
 ## Conventions
 
-- Public API is `PascalCase`; element attribute names are kebab-case.
+- Public API is `PascalCase`. Elements, attributes and properties use the
+  HTML and CSS names; terminal-only features (dim, inverse, the caret) use
+  the closest standard construct.
 - Public types carry a short summary. Comments explain why, not what.
 - Tests are xunit, one file per type under test, named for the behaviour
   (`A_flush_with_nothing_changed_writes_nothing`).

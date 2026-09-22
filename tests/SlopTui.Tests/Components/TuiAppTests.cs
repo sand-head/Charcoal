@@ -21,9 +21,9 @@ public class TuiAppTests
 
         protected override void BuildRenderTree(RenderTreeBuilder b)
         {
-            b.OpenElement(0, "box");
-            b.AddAttribute(1, "flex-direction", "column");
-            b.AddAttribute(2, "focusable", true);
+            b.OpenElement(0, "div");
+            b.AddAttribute(1, "tabindex", 0);
+            b.AddAttribute(2, "style", "height: 100%");
             b.AddAttribute(3, "onkeypress", EventCallback.Factory.Create<KeyPressEventArgs>(this, e =>
             {
                 Keys.Add(e.Key.ToString());
@@ -31,14 +31,12 @@ public class TuiAppTests
             }));
             b.AddAttribute(4, "onfocus", EventCallback.Factory.Create<FocusEventArgs>(this, _ => Focused = true));
             b.AddAttribute(5, "onblur", EventCallback.Factory.Create<FocusEventArgs>(this, _ => Focused = false));
-            b.OpenElement(6, "text");
+            b.OpenElement(6, "div");
             b.AddContent(7, $"count {Count}");
             b.CloseElement();
-            b.OpenElement(8, "box");
-            b.AddAttribute(9, "focusable", true);
-            b.OpenElement(10, "text");
-            b.AddContent(11, "second");
-            b.CloseElement();
+            b.OpenElement(8, "div");
+            b.AddAttribute(9, "tabindex", 0);
+            b.AddContent(10, "second");
             b.CloseElement();
             b.CloseElement();
         }

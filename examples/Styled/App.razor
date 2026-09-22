@@ -1,24 +1,24 @@
 @inject TuiApp Tui
 
-<box class="page" @onkeypress="OnKey">
-    <Text class="title">styled with a stylesheet</Text>
-    <Text class="muted">Tab moves focus between the cards; the focused card's border and heading turn green through :focus rules. q quits.</Text>
-    <box class="cards">
-        <box class="card" focusable="true">
-            <Text class="heading">plain card</Text>
-            <Text>Its colour is white because .card says so and text inherits it; its wrapping is wrap because ".card text" says so.</Text>
-        </box>
-        <box class="card warn" focusable="true">
-            <Text class="heading">warning card</Text>
-            <Text>Two classes: .card for the shape, .warn for the yellow border. The :focus rule wins the border while it has focus: same specificity, later in the sheet.</Text>
-        </box>
-        <box class="card" focusable="true" style="border: double">
-            <Text class="heading">inline style</Text>
-            <Text>An inline style attribute beats any rule: this border is double whatever the sheet says.</Text>
-        </box>
-    </box>
-    <Text id="footer">#footer is an id selector, and italic comes from it.</Text>
-</box>
+<div class="page" @onkeypress="OnKey">
+    <div class="title">styled with a stylesheet</div>
+    <div class="muted">Tab moves focus between the cards; the focused card's border and heading turn green through :focus rules. q quits.</div>
+    <div class="cards">
+        <div class="card" tabindex="0">
+            <div class="heading">plain card</div>
+            <p>Its colour is white because .card says so and text inherits it; its text wraps because that is what text does.</p>
+        </div>
+        <div class="card warn" tabindex="0">
+            <div class="heading">warning card</div>
+            <p>Two classes: .card for the shape, .warn for the yellow border. The :focus rule wins the border while it has focus: same specificity, later in the sheet.</p>
+        </div>
+        <div class="card" tabindex="0" style="border-style: double">
+            <div class="heading">inline style</div>
+            <p>An inline style attribute beats any rule: this border is double whatever the sheet says.</p>
+        </div>
+    </div>
+    <div id="footer">#footer is an id selector, and italic comes from it.</div>
+</div>
 
 @code {
     private void OnKey(KeyPressEventArgs e)

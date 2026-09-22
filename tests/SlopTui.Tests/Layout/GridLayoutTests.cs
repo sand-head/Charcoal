@@ -214,7 +214,7 @@ public class GridLayoutTests
     [Fact]
     public void A_scrolling_grid_shifts_its_rows()
     {
-        var root = new BoxNode(Grid(Track.Cells(4)) with { Overflow = Overflow.Scroll, ScrollY = 2, AlignContent = AlignContent.FlexStart });
+        var root = new BoxNode(Grid(Track.Cells(4)) with { Overflow = Overflow.Scroll, AlignContent = AlignContent.FlexStart }) { ScrollTop = 2 };
         for (var i = 0; i < 6; i++) root.Add(Leaf(4, 1));
         FlexLayout.Layout(root, new Size(4, 3));
 

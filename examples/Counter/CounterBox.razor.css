@@ -1,0 +1,6 @@
+.counter { border: solid bright-black; border-radius: 1; padding: 0 2; text-align: center }
+.counter:focus { border-color: green }
+.name { opacity: 0.5 }
+.counter:focus .name { opacity: 1 }
+.value { font-weight: bold }
+.counter:focus .value { color: green }

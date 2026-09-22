@@ -4,7 +4,7 @@ namespace SlopTui.Tests.Layout;
 
 public class FlexWrapTests
 {
-    private static readonly Style RowWrap = new() { FlexDirection = FlexDirection.Row, FlexWrap = FlexWrap.Wrap, ColumnGap = 1 };
+    private static readonly Style RowWrap = new() { Display = Display.Flex, FlexDirection = FlexDirection.Row, FlexWrap = FlexWrap.Wrap, ColumnGap = 1 };
 
     private static TextLeafNode Leaf(int width, int height, Style? style = null) => new(width, height, style);
 
@@ -72,7 +72,7 @@ public class FlexWrapTests
     [Fact]
     public void A_wrapping_column_breaks_into_columns()
     {
-        var column = new Style { FlexDirection = FlexDirection.Column, FlexWrap = FlexWrap.Wrap };
+        var column = new Style { Display = Display.Flex, FlexDirection = FlexDirection.Column, FlexWrap = FlexWrap.Wrap };
         var root = new BoxNode(column, Leaf(2, 2), Leaf(2, 2));
         FlexLayout.Layout(root, new Size(10, 3));
 
@@ -96,7 +96,7 @@ public class FlexWrapTests
     {
         var inner = ThreeInTen(RowWrap with { AlignContent = AlignContent.FlexStart });
         var after = Leaf(3, 1);
-        var root = new BoxNode(new Style { FlexDirection = FlexDirection.Column }, inner, after);
+        var root = new BoxNode(new Style { Display = Display.Flex, FlexDirection = FlexDirection.Column }, inner, after);
         FlexLayout.Layout(root, new Size(10, 10));
 
         Assert.Equal(2, inner.Layout.Height);

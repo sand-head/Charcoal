@@ -37,12 +37,16 @@ public static class Bench
         driver.Start();
 
         var sw = Stopwatch.StartNew();
+        double? firstFrameAt = null;
+        app.FramePainted += _ => firstFrameAt ??= sw.Elapsed.TotalMilliseconds;
         app.Run<App>(new Dictionary<string, object?> { ["Preload"] = 10_000, ["Streaming"] = false });
         sw.Stop();
         driver.Join();
 
         var first = frames[0];
-        Console.WriteLine($"frames {frames.Count} in {sw.Elapsed.TotalMilliseconds:F0} ms; first frame {first.Total.TotalMilliseconds:F1} ms ({first.Bytes} bytes)");
+        Console.WriteLine($"frames {frames.Count} in {sw.Elapsed.TotalMilliseconds:F0} ms");
+        Console.WriteLine($"first frame {first.Total.TotalMilliseconds:F1} ms ({first.Bytes} bytes: layout {first.Layout.TotalMilliseconds:F0} · "
+            + $"paint {first.Paint.TotalMilliseconds:F0} · flush {first.Flush.TotalMilliseconds:F0} ms), done {firstFrameAt:F0} ms after Run");
 
         var streamed = frames.Skip(1).ToList();
         if (streamed.Count > 0) PrintStreamingStats(streamed);

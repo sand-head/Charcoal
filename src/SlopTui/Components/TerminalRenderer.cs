@@ -9,15 +9,15 @@ namespace SlopTui.Components;
 
 /// <summary>
 /// A Blazor renderer that applies render batches to a <see cref="HostElement"/>
-/// tree, following <c>BrowserRenderer.ts</c>. It only marks the tree dirty;
-/// the app loop paints.
+/// tree under a root <c>body</c>, following <c>BrowserRenderer.ts</c>. It only
+/// marks the tree dirty; the app loop paints.
 /// </summary>
 public sealed class TerminalRenderer : Renderer
 {
     private readonly Dictionary<int, HostContainer> _containers = [];
     private readonly Dictionary<ulong, HostElement> _handlerOwners = [];
+    private readonly Dictionary<string, HostElement> _references = new(StringComparer.Ordinal);
     private readonly Action<Exception> _onException;
-    private readonly CanvasRegistry? _canvases;
     private readonly StyleContext? _styles;
     private readonly Graphics? _graphics;
 
@@ -26,11 +26,9 @@ public sealed class TerminalRenderer : Renderer
     {
         Dispatcher = dispatcher;
         _onException = onException;
-        _canvases = services.GetService(typeof(CanvasRegistry)) as CanvasRegistry;
         _graphics = services.GetService(typeof(Graphics)) as Graphics;
         _styles = styles;
-        Root = new HostElement("box", _canvases, _styles, _graphics);
-        Root.SetAttribute("flex-direction", "column", 0);
+        Root = new HostElement("body", _styles, _graphics);
     }
 
     public StyleContext? Styles => _styles;
@@ -72,7 +70,7 @@ public sealed class TerminalRenderer : Renderer
 
     public override Dispatcher Dispatcher { get; }
 
-    /// <summary>The box every root component renders into.</summary>
+    /// <summary>The <c>body</c> every root component renders into.</summary>
     public HostElement Root { get; }
 
     /// <summary>Set by each applied batch and cleared by the app when it paints.</summary>
@@ -81,11 +79,16 @@ public sealed class TerminalRenderer : Renderer
     /// <summary>Raised on the dispatcher thread after a batch is applied.</summary>
     public event Action? BatchApplied;
 
-    public void SetViewport(Size size)
-    {
-        Root.SetAttribute("width", size.Width, 0);
-        Root.SetAttribute("height", size.Height, 0);
-    }
+    public void SetViewport(Size size) =>
+        Root.SetAttribute("style", $"width: {size.Width}; height: {size.Height}", 0);
+
+    /// <summary>
+    /// The element a component captured with <c>@ref</c>, or null once it has
+    /// left the tree. Components use it to reach an element's state, such as a
+    /// scroll position, where a page would use JavaScript interop.
+    /// </summary>
+    public HostElement? Element(ElementReference reference) =>
+        reference.Id is { } id ? _references.GetValueOrDefault(id) : null;
 
     public Task AddRootComponentAsync(Type componentType, ParameterView parameters)
     {
@@ -239,6 +242,7 @@ public sealed class TerminalRenderer : Renderer
             else if (node is HostElement element)
             {
                 foreach (var handler in element.Handlers.Values) _handlerOwners.Remove(handler);
+                if (element.ReferenceId is { } reference) _references.Remove(reference);
             }
         }
     }
@@ -311,7 +315,7 @@ public sealed class TerminalRenderer : Renderer
     private HostContainer Markup(string markup)
     {
         var container = new HostContainer();
-        var nodes = MarkupParser.Parse(markup, name => new HostElement(name, _canvases, _styles, _graphics));
+        var nodes = MarkupParser.Parse(markup, name => new HostElement(name, _styles, _graphics, deferred: true));
         for (var i = 0; i < nodes.Count; i++)
         {
             container.InsertChild(i, nodes[i]);
@@ -322,17 +326,35 @@ public sealed class TerminalRenderer : Renderer
     private void InsertElement(HostNode parent, int childIndex, ArrayRange<RenderTreeFrame> frames, int frameIndex)
     {
         var frame = frames.Array[frameIndex];
-        var element = new HostElement(frame.ElementName, _canvases, _styles, _graphics);
+        var element = new HostElement(frame.ElementName, _styles, _graphics, deferred: true);
         var end = frameIndex + frame.ElementSubtreeLength;
         var descendant = frameIndex + 1;
         for (; descendant < end; descendant++)
         {
             var child = frames.Array[descendant];
-            if (child.FrameType != RenderTreeFrameType.Attribute) break;
-            ApplyAttribute(element, child);
+            if (child.FrameType == RenderTreeFrameType.Attribute)
+            {
+                ApplyAttribute(element, child);
+            }
+            else if (child.FrameType == RenderTreeFrameType.ElementReferenceCapture)
+            {
+                CaptureReference(element, child.ElementReferenceCaptureId);
+            }
+            else
+            {
+                break;
+            }
         }
         parent.InsertChild(childIndex, element);
         if (descendant < end) InsertFrameRange(element, 0, frames, descendant, end);
+    }
+
+    /// <summary>Links the id of a component's <c>ElementReference</c> to its element.</summary>
+    private void CaptureReference(HostElement element, string? referenceId)
+    {
+        if (referenceId is null) return;
+        element.ReferenceId = referenceId;
+        _references[referenceId] = element;
     }
 
     private void ApplyAttribute(HostElement element, in RenderTreeFrame frame)

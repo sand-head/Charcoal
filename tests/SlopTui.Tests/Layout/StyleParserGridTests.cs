@@ -18,13 +18,6 @@ public class StyleParserGridTests
     }
 
     [Fact]
-    public void Scroll_offsets_read_integers()
-    {
-        Assert.Equal(7, Apply("scroll-y", "7").ScrollY);
-        Assert.Equal(3, Apply("scroll-x", 3).ScrollX);
-    }
-
-    [Fact]
     public void A_track_template_reads_cells_percent_fractions_auto_and_repeat()
     {
         var tracks = Apply("grid-template-columns", "20 25% 1.5fr auto repeat(2, 1fr 4)").GridTemplateColumns;
@@ -73,11 +66,11 @@ public class StyleParserGridTests
     }
 
     [Fact]
-    public void The_new_names_are_style_attributes()
+    public void The_grid_names_are_properties()
     {
-        foreach (var name in new[] { "flex-wrap", "align-content", "justify-items", "scroll-x", "scroll-y",
+        foreach (var name in new[] { "flex-wrap", "align-content", "justify-items",
                      "grid-template-columns", "grid-template-rows", "grid-column", "grid-row",
                      "grid-column-start", "grid-column-end", "grid-row-start", "grid-row-end" })
-            Assert.True(StyleParser.IsStyleAttribute(name), name);
+            Assert.True(StyleParser.IsProperty(name), name);
     }
 }

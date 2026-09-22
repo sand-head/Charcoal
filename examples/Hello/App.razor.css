@@ -1,0 +1,5 @@
+/* Scoped to App, so these rules reach only App's own elements. */
+.app { padding: 1 2; height: 100% }
+.banner { width: fit-content; border: solid cyan; border-radius: 1; padding: 0 1; color: green; font-weight: bold }
+.muted { opacity: 0.5 }
+.picture { color: cyan; margin-top: 1 }

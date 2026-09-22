@@ -1,0 +1,5 @@
+.app { display: flex; flex-direction: column; height: 100% }
+.bar { display: flex; gap: 2; padding: 0 1 }
+.name { color: green; font-weight: bold }
+.muted { opacity: 0.5 }
+.transcript { display: flex; flex-direction: column; flex: 1; justify-content: flex-end; overflow: hidden; padding: 0 1 }

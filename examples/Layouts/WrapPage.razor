@@ -1,28 +1,28 @@
-<Box FlexDirection="FlexDirection.Column" FlexGrow="1" Gap="1" Padding="new Edges(0, 1)">
-    <Panel Title="flex-wrap: wrap · gap 1 · twenty chips in whatever width there is" Color="Color.Cyan">
-        <Box FlexWrap="FlexWrap.Wrap" Gap="1">
+<div class="page">
+    <Panel Title="flex-wrap: wrap · gap 1 · twenty chips in whatever width there is" Color="cyan">
+        <div class="wrap">
             @for (var i = 1; i <= 20; i++)
             {
-                <Chip Label="@($"chip {i}")" Background="@ChipColors[i % 3]" Foreground="@(i % 3 == 2 ? Color.Black : Color.White)" />
+                <Chip Label="@($"chip {i}")" Style="@ChipStyles[i % 3]" />
             }
-        </Box>
+        </div>
     </Panel>
-    <Box FlexGrow="1" Gap="1">
-        @foreach (var content in new[] { AlignContent.FlexStart, AlignContent.Center, AlignContent.FlexEnd, AlignContent.SpaceBetween, AlignContent.Stretch })
+    <div class="row">
+        @foreach (var content in new[] { "flex-start", "center", "flex-end", "space-between", "stretch" })
         {
-            <Box FlexDirection="FlexDirection.Column" FlexGrow="1" Border="BorderStyle.Single" BorderColor="Color.BrightBlack">
-                <Text Dim="true">@(" align-content " + content)</Text>
-                <Box FlexGrow="1" FlexWrap="FlexWrap.Wrap" AlignContent="content" Gap="1" Padding="new Edges(0, 1)">
+            <div class="panel">
+                <div class="muted">@(" align-content " + content)</div>
+                <div class="wrap grow" style="align-content: @content">
                     @for (var i = 1; i <= 6; i++)
                     {
-                        <Chip Label="@i.ToString()" Background="@(i % 2 == 0 ? Color.Green : Color.Blue)" Foreground="@(i % 2 == 0 ? Color.Black : Color.White)" />
+                        <Chip Label="@i.ToString()" Style="@ChipStyles[i % 2 == 0 ? 2 : 1]" />
                     }
-                </Box>
-            </Box>
+                </div>
+            </div>
         }
-    </Box>
-</Box>
+    </div>
+</div>
 
 @code {
-    private static readonly Color[] ChipColors = [Color.Red, Color.Blue, Color.Green];
+    private static readonly string[] ChipStyles = ["background: red", "background: blue", "background: green; color: black"];
 }

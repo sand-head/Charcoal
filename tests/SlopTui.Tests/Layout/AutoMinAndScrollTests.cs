@@ -4,8 +4,8 @@ namespace SlopTui.Tests.Layout;
 
 public class AutoMinAndScrollTests
 {
-    private static readonly Style Row = new() { FlexDirection = FlexDirection.Row };
-    private static readonly Style Column = new() { FlexDirection = FlexDirection.Column };
+    private static readonly Style Row = new() { Display = Display.Flex, FlexDirection = FlexDirection.Row };
+    private static readonly Style Column = new() { Display = Display.Flex, FlexDirection = FlexDirection.Column };
 
     private static TextLeafNode Leaf(int width, int height, Style? style = null) => new(width, height, style);
 
@@ -137,7 +137,7 @@ public class AutoMinAndScrollTests
     [Fact]
     public void A_scroll_offset_shifts_a_column_up()
     {
-        var root = new BoxNode(Column with { Overflow = Overflow.Scroll, ScrollY = 3 });
+        var root = new BoxNode(Column with { Overflow = Overflow.Scroll }) { ScrollTop = 3 };
         for (var i = 0; i < 10; i++) root.Add(Leaf(5, 1));
 
         FlexLayout.Layout(root, new Size(10, 5));
@@ -150,7 +150,7 @@ public class AutoMinAndScrollTests
     [Fact]
     public void Scrolled_away_children_are_deferred_and_visible_ones_arranged()
     {
-        var root = new BoxNode(Column with { Overflow = Overflow.Scroll, ScrollY = 3 });
+        var root = new BoxNode(Column with { Overflow = Overflow.Scroll }) { ScrollTop = 3 };
         for (var i = 0; i < 10; i++) root.Add(new BoxNode(Row, Leaf(2, 1)));
 
         FlexLayout.Layout(root, new Size(10, 5));
@@ -166,7 +166,7 @@ public class AutoMinAndScrollTests
     {
         // Rigid items (shrink 0), or the scroll box would shrink them to fit instead of scrolling.
         var rigid = new Style { FlexShrink = 0 };
-        var root = new BoxNode(Row with { Overflow = Overflow.Scroll, ScrollX = 2 }, Leaf(4, 1, rigid), Leaf(4, 1, rigid));
+        var root = new BoxNode(Row with { Overflow = Overflow.Scroll }, Leaf(4, 1, rigid), Leaf(4, 1, rigid)) { ScrollLeft = 2 };
         FlexLayout.Layout(root, new Size(6, 1));
 
         Assert.Equal(-2, root.Children[0].Layout.X);
@@ -177,7 +177,7 @@ public class AutoMinAndScrollTests
     [Fact]
     public void A_visible_box_has_nothing_to_scroll()
     {
-        var root = new BoxNode(Column with { ScrollY = 3 }, Leaf(5, 1), Leaf(5, 1));
+        var root = new BoxNode(Column, Leaf(5, 1), Leaf(5, 1)) { ScrollTop = 3 };
         FlexLayout.Layout(root, new Size(10, 5));
         Assert.Equal(0, root.Children[0].Layout.Y);
     }
@@ -185,11 +185,11 @@ public class AutoMinAndScrollTests
     [Fact]
     public void Changing_the_offset_rearranges()
     {
-        var root = new BoxNode(Column with { Overflow = Overflow.Scroll, ScrollY = 0 }, Leaf(5, 1), Leaf(5, 1), Leaf(5, 1));
+        var root = new BoxNode(Column with { Overflow = Overflow.Scroll }, Leaf(5, 1), Leaf(5, 1), Leaf(5, 1));
         FlexLayout.Layout(root, new Size(10, 2));
         Assert.Equal(0, root.Children[0].Layout.Y);
 
-        root.Style = root.Style with { ScrollY = 1 };
+        root.ScrollTop = 1;
         FlexLayout.Layout(root, new Size(10, 2));
 
         Assert.Equal(-1, root.Children[0].Layout.Y);

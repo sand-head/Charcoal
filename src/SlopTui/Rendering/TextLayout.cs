@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using SlopTui.Layout;
 
 namespace SlopTui.Rendering;
@@ -10,6 +11,122 @@ namespace SlopTui.Rendering;
 public static class TextLayout
 {
     public const string Ellipsis = "…";
+
+    /// <summary>
+    /// Applies CSS white-space processing to the runs in place. Under
+    /// <c>normal</c> and <c>nowrap</c> each run of whitespace becomes one
+    /// space and spaces at line edges go; <c>pre-line</c> also keeps
+    /// newlines; <c>pre</c> and <c>pre-wrap</c> keep everything. Forced
+    /// breaks are never whitespace.
+    /// </summary>
+    public static void CollapseWhitespace(List<TextRun> runs, WhiteSpace mode)
+    {
+        if (mode is WhiteSpace.Pre or WhiteSpace.PreWrap) return;
+
+        var collapser = new WhitespaceCollapser(keepNewlines: mode == WhiteSpace.PreLine);
+        foreach (var run in runs)
+        {
+            collapser.Add(run);
+        }
+        var collapsed = collapser.Finish();
+        runs.Clear();
+        runs.AddRange(collapsed.Where(run => run.Text.Length > 0));
+    }
+
+    private sealed class WhitespaceCollapser(bool keepNewlines)
+    {
+        private readonly List<TextRun> _result = [];
+        private readonly StringBuilder _text = new();
+        private bool _atLineStart = true;
+        private bool _trailingSpace;
+
+        public void Add(TextRun run)
+        {
+            if (run.Break)
+            {
+                EndLine();
+                _result.Add(run);
+                return;
+            }
+
+            foreach (var c in run.Text)
+            {
+                AddCharacter(c);
+            }
+            if (_text.Length > 0)
+            {
+                _result.Add(run with { Text = _text.ToString() });
+                _text.Clear();
+            }
+        }
+
+        public List<TextRun> Finish()
+        {
+            TrimTrailingSpace();
+            return _result;
+        }
+
+        private void AddCharacter(char c)
+        {
+            if (c == '\n' && keepNewlines)
+            {
+                EndLine();
+                _text.Append('\n');
+            }
+            else if (c is ' ' or '\t' or '\n' or '\r' or '\f')
+            {
+                if (_atLineStart || _trailingSpace) return;
+                _text.Append(' ');
+                _trailingSpace = true;
+            }
+            else
+            {
+                _text.Append(c);
+                _atLineStart = false;
+                _trailingSpace = false;
+            }
+        }
+
+        private void EndLine()
+        {
+            TrimTrailingSpace();
+            _atLineStart = true;
+        }
+
+        /// <summary>Drops the space before a line's end, even when an earlier run holds it.</summary>
+        private void TrimTrailingSpace()
+        {
+            if (!_trailingSpace) return;
+            _trailingSpace = false;
+            if (_text.Length > 0)
+            {
+                _text.Length--;
+                return;
+            }
+
+            for (var i = _result.Count - 1; i >= 0; i--)
+            {
+                if (_result[i].Break) return;
+                var text = _result[i].Text;
+                if (text.Length == 0)
+                {
+                    _result.RemoveAt(i);
+                    continue;
+                }
+
+                var trimmed = text[..^1];
+                if (trimmed.Length == 0)
+                {
+                    _result.RemoveAt(i);
+                }
+                else
+                {
+                    _result[i] = _result[i] with { Text = trimmed };
+                }
+                return;
+            }
+        }
+    }
 
     /// <summary>The visual lines of the runs at a width. A <c>"\n"</c> always breaks the line.</summary>
     public static List<List<TextRun>> Wrap(IReadOnlyList<TextRun> runs, int width, TextWrap mode)
@@ -86,6 +203,11 @@ public static class TextLayout
         var lines = new List<List<TextRun>> { new() };
         foreach (var run in runs)
         {
+            if (run.Break)
+            {
+                lines.Add([]);
+                continue;
+            }
             var text = run.Text;
             var start = 0;
             while (true)

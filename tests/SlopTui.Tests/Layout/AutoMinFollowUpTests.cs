@@ -5,8 +5,8 @@ namespace SlopTui.Tests.Layout;
 
 public class AutoMinFollowUpTests
 {
-    private static readonly Style Row = new() { FlexDirection = FlexDirection.Row };
-    private static readonly Style Column = new() { FlexDirection = FlexDirection.Column };
+    private static readonly Style Row = new() { Display = Display.Flex, FlexDirection = FlexDirection.Row };
+    private static readonly Style Column = new() { Display = Display.Flex, FlexDirection = FlexDirection.Column };
 
     private static TextLeafNode Leaf(int width, int height, Style? style = null) => new(width, height, style);
 
@@ -52,7 +52,7 @@ public class AutoMinFollowUpTests
         var header = Leaf(10, 1);
         var transcript = new BoxNode(Column with { Overflow = Overflow.Hidden, FlexGrow = 1 });
         for (var i = 0; i < 200; i++) transcript.Add(Leaf(10, 1));
-        var composer = new BoxNode(Row with { Border = BorderStyle.Single }, Leaf(5, 1));
+        var composer = new BoxNode(Row with { BorderStyle = BorderStyle.Solid }, Leaf(5, 1));
         var status = Leaf(10, 1);
         var app = new BoxNode(Column with { FlexGrow = 1 }, header, transcript, composer, status);
         var root = new BoxNode(Column, app);

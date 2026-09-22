@@ -1,24 +1,24 @@
 @* A ScrollBox that is focused when the page appears and follows the lines a timer appends. *@
 @implements IDisposable
 
-<Box FlexDirection="FlexDirection.Column" FlexGrow="1" Gap="1" Padding="new Edges(0, 1)">
-    <Text Dim="true">↑ ↓ PageUp PageDown Home End scroll the box; the wheel too. A line is appended every second; End sticks to the bottom.</Text>
-    <Box Gap="1" FlexGrow="1">
-        <ScrollBox @ref="_scroller" FlexGrow="1" Border="BorderStyle.Single" BorderColor="Color.Green" StickToBottom="true" Autofocus="true" Padding="new Edges(0, 1)" ScrollTopChanged="StateHasChanged">
+<div class="page">
+    <div class="muted">↑ ↓ PageUp PageDown Home End scroll the box; the wheel too. A line is appended every second; End sticks to the bottom.</div>
+    <div class="row">
+        <ScrollBox @ref="_scroller" class="scroller" StickToBottom="true" Autofocus="true" ScrollTopChanged="StateHasChanged">
             @foreach (var line in _lines)
             {
-                <Run Wrap="TextWrap.Clip" @key="line"><Run Dim="true">@($"{line,4} ")</Run><Run>@Words[line % Words.Length]</Run></Run>
+                <div class="line" @key="line"><span class="muted">@($"{line,4} ")</span>@Words[line % Words.Length]</div>
             }
         </ScrollBox>
-        <Box FlexDirection="FlexDirection.Column" Width="30" Gap="1" Border="BorderStyle.Single" BorderColor="Color.BrightBlack" Padding="new Edges(0, 1)">
-            <Text Bold="true">state</Text>
-            <Text Dim="true">position @(_scroller?.Position ?? 0)</Text>
-            <Text Dim="true">max @(_scroller?.MaxScroll ?? 0)</Text>
-            <Text Dim="true">@(_scroller?.AtEnd == true ? "at the end (sticky)" : "scrolled up (unstuck)")</Text>
-            <Text Dim="true">@_lines.Count lines</Text>
-        </Box>
-    </Box>
-</Box>
+        <div class="state">
+            <div class="heading">state</div>
+            <div class="muted">position @(_scroller?.Position ?? 0)</div>
+            <div class="muted">max @(_scroller?.MaxScroll ?? 0)</div>
+            <div class="muted">@(_scroller?.AtEnd == true ? "at the end (sticky)" : "scrolled up (unstuck)")</div>
+            <div class="muted">@_lines.Count lines</div>
+        </div>
+    </div>
+</div>
 
 @code {
     private static readonly string[] Words = ["the quick brown fox", "jumps over", "the lazy dog", "while the scroll box", "keeps the end in view", "until you scroll up"];

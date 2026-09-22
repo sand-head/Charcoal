@@ -1,0 +1,8 @@
+.page { display: flex; flex-direction: column; flex: 1; gap: 1; padding: 0 1 }
+.grid { display: grid; gap: 1 }
+.shell { grid-template-columns: 20 1fr; grid-template-rows: 1 1fr 1; flex: 1 }
+.header { grid-column: 1 / 3; grid-row: 1; background: blue; color: white; padding: 0 1 }
+.sidebar { grid-column: 1; grid-row: 2; background: bright-black; padding: 0 1 }
+.main { grid-column: 2; grid-row: 2; border: solid bright-black; padding: 0 1 }
+.footer { grid-column: 1 / 3; grid-row: 3; background: green; color: black; padding: 0 1 }
+.muted { opacity: 0.5 }

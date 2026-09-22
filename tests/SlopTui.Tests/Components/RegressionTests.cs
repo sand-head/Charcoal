@@ -12,19 +12,19 @@ public class RegressionTests
     {
         protected override void BuildRenderTree(RenderTreeBuilder b)
         {
-            b.OpenElement(0, "box"); b.AddAttribute(1, "class", "page");
-            b.OpenElement(2, "text"); b.AddAttribute(3, "class", "title"); b.AddContent(4, "styled with a stylesheet"); b.CloseElement();
-            b.OpenElement(5, "text"); b.AddAttribute(6, "class", "muted"); b.AddContent(7, "Tab moves focus between the cards; the focused card's border and heading turn green through :focus rules. q quits."); b.CloseElement();
-            b.OpenElement(8, "box"); b.AddAttribute(9, "class", "cards");
+            b.OpenElement(0, "div"); b.AddAttribute(1, "class", "page");
+            b.OpenElement(2, "div"); b.AddAttribute(3, "class", "title"); b.AddContent(4, "styled with a stylesheet"); b.CloseElement();
+            b.OpenElement(5, "div"); b.AddAttribute(6, "class", "muted"); b.AddContent(7, "Tab moves focus between the cards; the focused card's border and heading turn green through :focus rules. q quits."); b.CloseElement();
+            b.OpenElement(8, "div"); b.AddAttribute(9, "class", "cards");
             for (var i = 0; i < 3; i++)
             {
-                b.OpenElement(10, "box"); b.AddAttribute(11, "class", "card"); b.AddAttribute(12, "id", "card" + i);
-                b.OpenElement(13, "text"); b.AddAttribute(14, "class", "heading"); b.AddContent(15, "plain card"); b.CloseElement();
-                b.OpenElement(16, "text"); b.AddContent(17, "Its colour is white because .card says so and text inherits it; its wrapping is wrap because \".card text\" says so."); b.CloseElement();
+                b.OpenElement(10, "div"); b.AddAttribute(11, "class", "card"); b.AddAttribute(12, "id", "card" + i);
+                b.OpenElement(13, "div"); b.AddAttribute(14, "class", "heading"); b.AddContent(15, "plain card"); b.CloseElement();
+                b.OpenElement(16, "div"); b.AddContent(17, "Its colour is white because .card says so and text inherits it; its wrapping is wrap because \".card text\" says so."); b.CloseElement();
                 b.CloseElement();
             }
             b.CloseElement();
-            b.OpenElement(18, "text"); b.AddAttribute(19, "id", "footer"); b.AddContent(20, "#footer is an id selector, and italic comes from it."); b.CloseElement();
+            b.OpenElement(18, "div"); b.AddAttribute(19, "id", "footer"); b.AddContent(20, "#footer is an id selector, and italic comes from it."); b.CloseElement();
             b.CloseElement();
         }
     }
@@ -35,11 +35,10 @@ public class RegressionTests
         var terminal = new HeadlessTerminal(96, 16);
         var app = new TuiApp(terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
         app.AddStylesheet("""
-            box.page { padding: 1 2; gap: 1; flex-direction: column; }
-            .cards { gap: 2; }
-            .card { flex-direction: column; border: round; padding: 0 1; width: 26; color: white; }
-            .card .heading { bold: true; }
-            .card text { wrap: wrap; }
+            div.page { display: flex; padding: 1 2; gap: 1; flex-direction: column; }
+            .cards { display: flex; gap: 2; }
+            .card { border: solid; border-radius: 1; padding: 0 1; width: 26; color: white; }
+            .card .heading { font-weight: bold; }
             """);
         var run = Task.Run(() => app.Run<Cards>());
         var deadline = DateTime.UtcNow.AddSeconds(5);
@@ -62,11 +61,12 @@ public class RegressionTests
 
         protected override void BuildRenderTree(RenderTreeBuilder b)
         {
-            b.OpenElement(0, "box"); b.AddAttribute(1, "focusable", true);
+            b.OpenElement(0, "div"); b.AddAttribute(1, "tabindex", 0);
             b.OpenComponent<ScrollBox>(2);
-            b.AddComponentParameter(3, nameof(ScrollBox.ChildContent), (RenderFragment)(inner =>
+            b.AddComponentParameter(3, "id", "scroller");
+            b.AddComponentParameter(4, nameof(ScrollBox.ChildContent), (RenderFragment)(inner =>
             {
-                for (var i = 1; i <= 30; i++) { inner.OpenElement(0, "text"); inner.SetKey(i); inner.AddContent(1, $"line {i}"); inner.CloseElement(); }
+                for (var i = 1; i <= 30; i++) { inner.OpenElement(0, "div"); inner.SetKey(i); inner.AddContent(1, $"line {i}"); inner.CloseElement(); }
             }));
             b.CloseComponent();
             b.CloseElement();
@@ -75,7 +75,7 @@ public class RegressionTests
         protected override void OnAfterRender(bool firstRender)
         {
             if (!firstRender) return;
-            var element = Tui.Renderer.Root.Descendants().OfType<HostElement>().FirstOrDefault(e => e.Id is { } id && id.StartsWith("scrollbox-"));
+            var element = Tui.Renderer.Root.Descendants().OfType<HostElement>().FirstOrDefault(e => e.Id == "scroller");
             Log += element is null ? "no element;" : "found;";
             if (element is not null)
             {
@@ -108,15 +108,16 @@ public class RegressionTests
 
         protected override void BuildRenderTree(RenderTreeBuilder b)
         {
-            b.OpenElement(0, "box"); b.AddAttribute(1, "flex-direction", "column");
-            b.OpenElement(2, "text"); b.AddContent(3, $"{Lines} lines"); b.CloseElement();
+            b.OpenElement(0, "div");
+            b.OpenElement(2, "div"); b.AddContent(3, $"{Lines} lines"); b.CloseElement();
             b.OpenComponent<ScrollBox>(4);
             b.AddComponentParameter(5, nameof(ScrollBox.Autofocus), true);
             b.AddComponentParameter(6, nameof(ScrollBox.StickToBottom), true);
             b.AddComponentParameter(7, nameof(ScrollBox.ScrollTopChanged), EventCallback.Factory.Create<int>(this, _ => { }));
+            b.AddComponentParameter(9, "id", "grower");
             b.AddComponentParameter(8, nameof(ScrollBox.ChildContent), (RenderFragment)(inner =>
             {
-                for (var i = 1; i <= Lines; i++) { inner.OpenElement(0, "text"); inner.SetKey(i); inner.AddContent(1, $"line {i}"); inner.CloseElement(); }
+                for (var i = 1; i <= Lines; i++) { inner.OpenElement(0, "div"); inner.SetKey(i); inner.AddContent(1, $"line {i}"); inner.CloseElement(); }
             }));
             b.CloseComponent();
             b.CloseElement();

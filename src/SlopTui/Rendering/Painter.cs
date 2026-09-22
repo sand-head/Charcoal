@@ -17,13 +17,13 @@ public static class Painter
     private static void PaintNode(LayoutNode node, CellBuffer buffer)
     {
         var style = node.Style;
-        if (style.Display == Display.None) return;
+        if (style.Display == Display.None || style.Visibility == Visibility.Hidden) return;
         var rect = node.Layout;
         if (rect.IsEmpty) return;
         if (rect.Intersect(buffer.Clip).IsEmpty) return;
 
         if (style.Background != Color.Default) buffer.Fill(rect, Cell.Space(style.Color, style.Background));
-        if (style.Border != BorderStyle.None) Borders.Draw(buffer, rect, style);
+        if (style.HasBorder) Borders.Draw(buffer, rect, style);
 
         var content = rect.Deflate(style.Inset);
 
@@ -57,15 +57,26 @@ public static class Painter
         {
             var y = content.Y + i;
             if (y >= content.Bottom) break;
-            var x = content.X;
+            var x = content.X + AlignmentOffset(style.TextAlign, content.Width - TextLayout.LineWidth(lines[i]));
             foreach (var run in lines[i])
             {
                 var fg = run.Foreground == Color.Default ? style.Color : run.Foreground;
                 var bg = run.Background == Color.Default ? style.Background : run.Background;
-                var flags = run.Style | style.TextStyle;
-                x += buffer.PutText(x, y, run.Text, fg, bg, flags);
+                x += buffer.PutText(x, y, run.Text, fg, bg, run.Style);
                 if (x >= content.Right) break;
             }
         }
+    }
+
+    /// <summary>Where a line starts within its box; a line wider than the box starts at the left.</summary>
+    private static int AlignmentOffset(TextAlign align, int slack)
+    {
+        if (slack <= 0) return 0;
+        return align switch
+        {
+            TextAlign.Center => slack / 2,
+            TextAlign.Right => slack,
+            _ => 0,
+        };
     }
 }

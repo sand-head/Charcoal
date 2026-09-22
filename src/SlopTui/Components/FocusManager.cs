@@ -3,8 +3,9 @@ using SlopTui.Styling;
 namespace SlopTui.Components;
 
 /// <summary>
-/// Tracks which element has the keyboard. Elements with <c>focusable="true"</c>
-/// take part, in tree order. Focus is dropped when its element leaves the tree.
+/// Tracks which element has the keyboard. As on a page, <c>tabindex="0"</c>
+/// joins the Tab cycle in tree order and <c>-1</c> takes focus only from a
+/// click or a call. Focus is dropped when its element leaves the tree.
 /// </summary>
 public sealed class FocusManager
 {
@@ -28,7 +29,7 @@ public sealed class FocusManager
 
     /// <summary>The focusable elements in tree order.</summary>
     public List<HostElement> Order() =>
-        _root.Descendants().OfType<HostElement>().Where(e => e.Focusable && IsShown(e)).ToList();
+        _root.Descendants().OfType<HostElement>().Where(e => e.Tabbable && IsShown(e)).ToList();
 
     private static bool IsShown(HostElement element) =>
         element.Node.Style.Display != Layout.Display.None
