@@ -9,8 +9,9 @@
     <SlopTuiEmbedScopedCss Condition="'$(SlopTuiEmbedScopedCss)' == ''">true</SlopTuiEmbedScopedCss>
   </PropertyGroup>
 
+  <!-- Projects without the Razor pipeline, such as an app's tests, inherit these targets too. -->
   <Target Name="SlopTuiEmbedScopedCss"
-          Condition="'$(SlopTuiEmbedScopedCss)' == 'true'"
+          Condition="'$(SlopTuiEmbedScopedCss)' == 'true' and '$(GenerateScopedCssFilesDependsOn)' != ''"
           DependsOnTargets="GenerateScopedCssFiles"
           BeforeTargets="AssignTargetPaths;SplitResourcesByCulture">
     <!-- Must run before resource names are assigned. -->
