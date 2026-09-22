@@ -27,6 +27,9 @@ public sealed record TuiAppOptions
 
     public TerminalOptions Terminal { get; init; } = TerminalOptions.Default;
 
+    /// <summary>Whether dragging the mouse selects text; see <see cref="TuiApp.Selection"/>.</summary>
+    public bool MouseSelection { get; init; } = true;
+
     public static readonly TuiAppOptions Default = new();
 }
 
@@ -72,6 +75,16 @@ public sealed class TuiApp
 
     /// <summary>The terminal's picture capabilities and the images sent to it.</summary>
     public Graphics Graphics { get; } = new();
+
+    /// <summary>The text the mouse has selected. A release copies it to the clipboard.</summary>
+    public MouseSelection Selection { get; } = new();
+
+    /// <summary>Puts text on the terminal's clipboard with OSC 52. Safe to call from any thread.</summary>
+    public void CopyToClipboard(string text)
+    {
+        var escape = Ansi.CopyToClipboard(text);
+        if (escape.Length > 0) _terminal.Write(escape);
+    }
 
     /// <summary>Services for components to <c>@inject</c>, registered before <see cref="Run{TRoot}"/>.</summary>
     public IServiceCollection Services { get; } = new ServiceCollection();
@@ -407,6 +420,7 @@ public sealed class TuiApp
         _screen!.Back.Fill(Cell.Blank);
         Graphics.BeginFrame();
         Painter.Paint(_renderer.Root.Node, _screen.Back);
+        Selection.Highlight(_screen.Back);
         Overlay?.Invoke(_screen.Back);
         PlaceCursor();
 
@@ -512,6 +526,13 @@ public sealed class TuiApp
         var args = new KeyPressEventArgs(key);
         await BubbleAsync(_focus!.Focused, "onkeypress", args, () => args.Handled);
         if (args.Handled) return;
+
+        // Ctrl+C copies while something is selected, and exits otherwise.
+        if (key.IsCtrl('c') && Selection.Active)
+        {
+            CopySelection();
+            return;
+        }
 
         if (_options.TabMovesFocus && key.Key == Key.Tab && !key.Ctrl && !key.Alt)
         {
@@ -654,6 +675,10 @@ public sealed class TuiApp
             if (args.Handled) return;
         }
         await BubbleAsync(target, "onmouse", args, () => args.Handled);
+        if (!args.Handled)
+        {
+            Select(mouse, target);
+        }
     }
 
     private async Task FocusClosestFocusableAsync(HostElement target)
@@ -663,6 +688,63 @@ public sealed class TuiApp
 
         await _focus.FocusAsync(focusable);
         _renderer!.Dirty = true;
+    }
+
+    /// <summary>Updates the mouse selection with an event no handler took.</summary>
+    private void Select(MouseEvent mouse, HostElement target)
+    {
+        if (!_options.MouseSelection || !Selection.Enabled) return;
+
+        var at = new CellPosition(mouse.Y, mouse.X);
+        switch (mouse.Action)
+        {
+            case MouseAction.Pressed when mouse.Button == MouseButton.Left:
+                StartSelection(at, target);
+                break;
+            case MouseAction.Moved when Selection.Dragging:
+                Selection.Drag(at);
+                _renderer!.Dirty = true;
+                break;
+            case MouseAction.Released when Selection.Dragging:
+                Selection.Release(at);
+                if (Selection.CopyOnRelease)
+                {
+                    CopySelection();
+                }
+                else
+                {
+                    _renderer!.Dirty = true;
+                }
+                break;
+        }
+    }
+
+    private void StartSelection(CellPosition at, HostElement target)
+    {
+        // Every press clears the old selection, even where nothing can be
+        // selected, so a drag starting outside cannot extend it.
+        var hadSelection = Selection.Active;
+        Selection.Clear();
+        var screen = new Rect(0, 0, _size.Width, _size.Height);
+        if (MouseSelection.Allows(target, screen, out var region))
+        {
+            Selection.Press(at, region);
+        }
+        if (hadSelection)
+        {
+            _renderer!.Dirty = true;
+        }
+    }
+
+    private void CopySelection()
+    {
+        var text = _screen is null ? null : Selection.Text(_screen.Back);
+        Selection.Clear();
+        _renderer!.Dirty = true;
+        if (text is null) return;
+
+        CopyToClipboard(text);
+        Selection.RaiseCopied(text);
     }
 
     /// <summary>Raises the event on the element and then its ancestors until one handles it.</summary>

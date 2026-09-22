@@ -60,5 +60,19 @@ public static class Ansi
     /// <summary>OSC 11, the default background colour. The reply is <c>OSC 11 ; rgb:rrrr/gggg/bbbb ST</c>.</summary>
     public const string QueryBackground = "\e]11;?\e\\";
 
+    /// <summary>Longer text is not sent, since terminals limit the length of an OSC sequence.</summary>
+    public const int ClipboardMaxChars = 64 * 1024;
+
+    /// <summary>
+    /// OSC 52, which puts text on the clipboard of the machine running the
+    /// terminal, even over ssh. Empty or overlong text gives an empty string.
+    /// </summary>
+    public static string CopyToClipboard(string text)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length > ClipboardMaxChars) return "";
+        var encoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(text));
+        return $"\e]52;c;{encoded}\e\\";
+    }
+
     public const string EraseToEndOfLine = "\e[K";
 }

@@ -393,6 +393,14 @@ took the key. Mouse events hit-test the arranged tree and dispatch `@onclick`
 click focuses the nearest focusable element. `@onfocus` / `@onblur` fire on
 change.
 
+**Mouse selection** (`MouseSelection`, `TuiApp.Selection`) handles the mouse
+events no handler took. A left press anchors a selection unless
+`user-select: none` applies, and the nearest `user-select: contain` ancestor
+confines the drag to its box. Releasing copies the text read back from the
+painted frame to the clipboard with OSC 52 and clears the highlight; Ctrl+C
+during a drag copies instead of exiting. The highlight is drawn in inverse
+video between the painter and the overlay, so components are unaware of it.
+
 Event names and argument types are declared in `EventHandlers` with
 `[EventHandler]`, as `Microsoft.AspNetCore.Components.Web` declares the
 DOM's, so Razor type-checks handlers.

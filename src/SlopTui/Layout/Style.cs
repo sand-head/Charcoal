@@ -33,6 +33,14 @@ public enum Position { Relative, Absolute }
 public enum Visibility { Visible, Hidden }
 
 /// <summary>
+/// CSS <c>user-select</c>. <see cref="None"/> keeps an element and its
+/// descendants out of the mouse selection, <see cref="Text"/> and
+/// <see cref="All"/> let a descendant back in, and <see cref="Contain"/>
+/// confines a selection started inside the element to its box.
+/// </summary>
+public enum UserSelect { Auto, None, Text, All, Contain }
+
+/// <summary>
 /// CSS <c>container-type</c>, which makes a query container for
 /// <c>@container</c>. The contained axes take no size from the content.
 /// </summary>
@@ -180,6 +188,8 @@ public sealed record Style
     public int ColumnGap { get; init; }
     public Overflow Overflow { get; init; } = Overflow.Visible;
     public Visibility Visibility { get; init; } = Visibility.Visible;
+
+    public UserSelect UserSelect { get; init; } = UserSelect.Auto;
 
     // Container queries
     public ContainerType ContainerType { get; init; } = ContainerType.Normal;

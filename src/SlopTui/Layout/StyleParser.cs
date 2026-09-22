@@ -75,6 +75,7 @@ public static class StyleParser
         ["overflow"] = (s, v) => s with { Overflow = OverflowOf(v, "overflow") },
         ["overflow-x"] = (s, v) => s with { Overflow = OverflowOf(v, "overflow-x") },
         ["overflow-y"] = (s, v) => s with { Overflow = OverflowOf(v, "overflow-y") },
+        ["user-select"] = (s, v) => s with { UserSelect = UserSelectOf(v) },
         ["container-type"] = (s, v) => s with { ContainerType = ContainerTypeOf(v) },
         ["container-name"] = (s, v) => s with { ContainerNames = ContainerNamesOf(v) },
         ["container"] = Container,
@@ -141,7 +142,7 @@ public static class StyleParser
         "transition", "transition-property", "transition-duration", "transition-timing-function", "transition-delay",
         "animation", "animation-name", "animation-duration", "transform", "transform-origin", "background-image", "background-size",
         "background-position", "background-repeat", "background-attachment", "background-clip", "border-collapse", "border-spacing",
-        "border-image", "list-style", "list-style-type", "list-style-position", "user-select", "pointer-events", "appearance",
+        "border-image", "list-style", "list-style-type", "list-style-position", "pointer-events", "appearance",
         "resize", "content", "quotes", "scroll-behavior", "scrollbar-width", "scrollbar-color", "will-change", "isolation",
         "mix-blend-mode", "backdrop-filter", "clip-path", "object-fit", "object-position", "aspect-ratio", "inset", "order",
         "grid-area", "grid-template-areas", "grid-template", "grid-auto-flow", "grid-auto-rows", "grid-auto-columns", "place-items",
@@ -765,6 +766,20 @@ public static class StyleParser
         var argument = text[(at + "invert(".Length)..close].Trim();
         var amount = argument.Length == 0 ? 1 : Amount(argument, "filter");
         return amount >= 0.5 ? SetFlag(style, TextStyle.Inverse) : ClearFlag(style, TextStyle.Inverse);
+    }
+
+    private static UserSelect UserSelectOf(object? value)
+    {
+        if (value is UserSelect u) return u;
+        return Text(value).ToLowerInvariant() switch
+        {
+            "auto" or "inherit" or "unset" or "initial" => UserSelect.Auto,
+            "none" => UserSelect.None,
+            "text" => UserSelect.Text,
+            "all" => UserSelect.All,
+            "contain" => UserSelect.Contain,
+            _ => throw Bad("user-select", value),
+        };
     }
 
     private static ContainerType ContainerTypeOf(object? value)

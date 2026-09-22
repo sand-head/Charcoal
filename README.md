@@ -108,6 +108,11 @@ return new TuiApp().Run<App>();
   and `@onpaste`. Keys go to the focused element and bubble up.
   `tabindex="0"` joins the Tab order, `tabindex="-1"` is focusable by click
   only. `caret="col,row"` on a focused element places the terminal's cursor.
+- **Mouse selection.** Dragging selects text, and releasing copies it to the
+  clipboard with OSC 52, which also works over ssh. Ctrl+C during a drag
+  copies too. `user-select: none` keeps an element out of the selection and
+  `user-select: contain` confines a drag to an element's box.
+  `app.CopyToClipboard(text)` copies anything else.
 - **A frame is one write.** The screen is double-buffered and only changed
   spans are repainted, inside synchronized output. A streaming transcript of
   ten thousand lines paints in a few milliseconds.
