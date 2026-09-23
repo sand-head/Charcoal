@@ -35,11 +35,13 @@ public enum Overflow { Visible, Hidden, Scroll }
 /// </summary>
 /// <remarks>
 /// To keep a log pinned to the bottom, exclude every child and leave a
-/// sentinel with a height at the end:
+/// sentinel at the end:
 /// <code>
 /// .log > *       { overflow-anchor: none }
-/// .log > .bottom { overflow-anchor: auto; height: 1 }
+/// .log > .bottom { overflow-anchor: auto }
 /// </code>
+/// Unlike on the web, the sentinel needs no height, because the smallest
+/// height a terminal has is a whole row.
 /// </remarks>
 public enum OverflowAnchor { Auto, None }
 

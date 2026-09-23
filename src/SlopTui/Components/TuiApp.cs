@@ -744,16 +744,24 @@ public sealed class TuiApp
             var style = child.Node.Style;
             if (style.OverflowAnchor == OverflowAnchor.None || style.Display == Display.None) continue;
 
-            // A box without height cannot hold a position.
             var rect = child.Node.Layout;
-            if (rect.Height <= 0 || rect.Bottom <= scrollport.Y || rect.Y >= scrollport.Bottom) continue;
+            if (!IsInView(rect, scrollport)) continue;
 
             var candidate = (child.IsScrollContainer ? null : SelectAnchor(child, scrollport)) ?? child;
-            if (rect.Y >= scrollport.Y && rect.Bottom <= scrollport.Bottom) return candidate;
+            if (IsFullyInView(rect, scrollport)) return candidate;
             partlyVisible ??= candidate;
         }
         return partlyVisible;
     }
+
+    // An element without height holds the line it sits on. The web's
+    // sentinel is 1px tall, but here the smallest height is a whole row.
+    private static bool IsInView(Rect rect, Rect scrollport) => rect.Height <= 0
+        ? rect.Y >= scrollport.Y && rect.Y <= scrollport.Bottom
+        : rect.Bottom > scrollport.Y && rect.Y < scrollport.Bottom;
+
+    private static bool IsFullyInView(Rect rect, Rect scrollport) =>
+        rect.Height <= 0 || (rect.Y >= scrollport.Y && rect.Bottom <= scrollport.Bottom);
 
     /// <summary>
     /// Handles the answers to the start-up queries, repainting pictures that

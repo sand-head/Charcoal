@@ -3,7 +3,7 @@
 .scroller { overflow: auto; flex: 1; border: solid green; padding: 0 1 }
 /* Only the sentinel can anchor, which keeps the box at the bottom. */
 .scroller > * { overflow-anchor: none }
-.scroller > .bottom { overflow-anchor: auto; height: 1 }
+.scroller > .bottom { overflow-anchor: auto }
 .line { white-space: pre }
 .state { display: flex; flex-direction: column; gap: 1; width: 30; border: solid bright-black; padding: 0 1 }
 .heading { font-weight: bold }

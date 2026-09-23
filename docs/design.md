@@ -377,7 +377,7 @@ pass, because a terminal works in integers and the property set is small:
   offset the anchor was chosen at, and any scroll since then retires the
   anchor, since otherwise the correction would undo the scroll. Pinning to
   the bottom uses the web's stylesheet, with every child excluded and a
-  sentinel with a height at the end. A box that opens on a backlog still has
+  sentinel at the end. A box that opens on a backlog still has
   to be scrolled to its end once, since anchoring keeps a position but does
   not choose one.
 - A container's cross size is measured with its items at their final main
@@ -486,7 +486,9 @@ message lands on a readable screen.
   names for it. A wrapping component would also take the element out of the
   app's CSS scope.
 - Deviations from a browser are deliberate and documented where they live:
-  `body` has no margin, and replaced elements and form controls are blocks.
+  `body` has no margin, replaced elements and form controls are blocks, and
+  a scroll anchor may have no height, since the web's 1px sentinel would
+  cost a whole row here.
 - Public types carry a short summary. Comments explain why, not what.
 - Tests are xunit, one file per type under test, named for the behaviour
   (`A_flush_with_nothing_changed_writes_nothing`).

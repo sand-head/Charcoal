@@ -52,11 +52,10 @@ public class ScrollTests
             }
             if (Pinned)
             {
-                // The sentinel: the only thing left eligible, and it must have
-                // a height or it cannot hold a position.
+                // The sentinel, the only element left eligible to anchor.
                 b.OpenElement(11, "div");
                 b.SetKey("sentinel");
-                b.AddAttribute(12, "style", "height: 1");
+                b.AddAttribute(12, "style", "height: 0");
                 b.CloseElement();
             }
             b.CloseElement();
@@ -138,16 +137,16 @@ public class ScrollTests
         {
             var lines = running.Component.Lines + 1;
             await running.App.InvokeAsync(() => { running.Component.Lines = lines; running.Component.Refresh(); });
-            running.Until(() => running.Box.ScrollHeight == lines + 1, $"the layout to see {lines} lines");
+            running.Until(() => running.Box.ScrollHeight == lines, $"the layout to see {lines} lines");
             running.Until(() => running.Box.ScrollTop == running.Box.ScrollTopMax, $"the pin to hold at {lines} lines");
         }
 
         Assert.Equal(17, running.Component.Lines);
-        // The sentinel is what is holding it there, and it is on the last row
-        // of the scrollport.
+        // The sentinel holds the line just past the last row, and costs none.
         var port = running.Box.Scrollport;
         var sentinel = running.Box.ChildElements().Last();
-        Assert.Equal(port.Bottom - 1, sentinel.Node.Layout.Y);
+        Assert.Equal(0, sentinel.Node.Layout.Height);
+        Assert.Equal(port.Bottom, sentinel.Node.Layout.Y);
     }
 
     [Fact]

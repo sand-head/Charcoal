@@ -116,10 +116,12 @@ return new TuiApp().Run<App>();
 
   ```css
   .log > *       { overflow-anchor: none }
-  .log > .bottom { overflow-anchor: auto; height: 1 }
+  .log > .bottom { overflow-anchor: auto }
   ```
 
-  Scrolling up moves the sentinel out of view, and the log stops following.
+  Unlike on the web, the sentinel needs no height, since the smallest height
+  a terminal has is a whole row. Scrolling up moves the sentinel out of
+  view, and the log stops following.
 - **Text that measures right.** Grapheme clusters and wcwidth, so CJK and
   emoji take two cells and combining marks take none. `white-space` decides
   wrapping and collapsing, and `text-overflow` decides the cut.
