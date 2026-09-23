@@ -1,5 +1,5 @@
 using Counter;
-using SlopTui.Components;
+using Charcoal.Components;
 
 // State, focus, a timer, and events: Tab moves between counters, +/- change
 // the focused one, click a counter to focus it, q quits.

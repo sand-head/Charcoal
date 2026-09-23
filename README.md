@@ -1,4 +1,4 @@
-# sloptui
+# Charcoal
 
 A component-style terminal UI library for .NET. Write `.razor` components
 with HTML elements and CSS, and get a cell-diffed terminal frame out.
@@ -9,7 +9,7 @@ render tree is this library.
 @inject TuiApp App
 
 <div class="app" tabindex="0" @onkeydown="OnKey">
-    <div class="banner">Hello from sloptui</div>
+    <div class="banner">Hello from Charcoal</div>
     <p class="muted">Press q to quit.</p>
 </div>
 
@@ -181,7 +181,7 @@ Packages are published to GitHub Packages on each merge to `main` (pre-1.0):
 ```
 
 ```sh
-dotnet add package SlopTui
+dotnet add package Charcoal
 ```
 
 An app project uses the Razor SDK, so its `.razor` files compile and its
@@ -194,13 +194,13 @@ An app project uses the Razor SDK, so its `.razor` files compile and its
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="SlopTui" Version="0.1.*" />
+    <PackageReference Include="Charcoal" Version="0.1.*" />
   </ItemGroup>
 </Project>
 ```
 
-with an `_Imports.razor` of `@using SlopTui.Components`, `@using SlopTui.Layout`,
-`@using SlopTui.Rendering`, `@using SlopTui.Input`.
+with an `_Imports.razor` of `@using Charcoal.Components`, `@using Charcoal.Layout`,
+`@using Charcoal.Rendering`, `@using Charcoal.Input`.
 
 ## How it is put together
 

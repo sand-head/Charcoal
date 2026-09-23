@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
-using SlopTui.Components;
-using SlopTui.Layout;
-using SlopTui.Terminal;
+using Charcoal.Components;
+using Charcoal.Layout;
+using Charcoal.Terminal;
 
 namespace Transcript;
 

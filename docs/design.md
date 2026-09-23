@@ -1,6 +1,6 @@
-# sloptui design
+# Charcoal design
 
-sloptui renders Blazor components to a terminal. Components are `.razor`
+Charcoal renders Blazor components to a terminal. Components are `.razor`
 files reconciled by Blazor's own `Renderer`; the library styles them with
 CSS, lays them out on a grid of terminal cells, paints them into a cell
 buffer, and writes the difference from the previous frame to the terminal.
@@ -26,13 +26,13 @@ this library.
 
 | Namespace | Owns | Depends on |
 |---|---|---|
-| `SlopTui.Layout` | `Style` (the CSS subset), `Length`, `Edges`, geometry, `LayoutNode`, `FlexLayout`, `StyleParser` | `SlopTui.Rendering` for `Color` only |
-| `SlopTui.Rendering` | `Color`, `TextStyle`, `TextRun`, `Cell`, `CellBuffer`, `Screen` (diff → ANSI), `TextWidth`, `TextLayout` (wrapping), `Painter`, `ITextContent`, `ICustomPaint` | `SlopTui.Layout` for `Rect`/`Style` |
-| `SlopTui.Input` | `Key`, `KeyModifiers`, `KeyEvent`, `MouseEvent`, `PasteEvent`, `FocusEvent`, `AnsiKeyParser`, `InputPump` | nothing |
-| `SlopTui.Terminal` | `ITerminal`, `ConsoleTerminal` (Unix termios + Windows VT), `HeadlessTerminal`, `TerminalOptions` | `SlopTui.Layout` for `Size` |
-| `SlopTui.Styling` | `Stylesheet`, `Selector`, `StyleResolver`, `StyleContext`, `UserAgentStylesheet`: the cascade | `SlopTui.Layout`, `SlopTui.Components` (the host tree it matches) |
-| `SlopTui.Components` | `TerminalRenderer`, `TerminalDispatcher`, host tree, `MarkupParser`, `TuiApp`, focus, event args, `EventHandlers` | everything above |
-| `SlopTui.Routing` | `TerminalNavigationManager`: the location, in memory | `Microsoft.AspNetCore.Components` |
+| `Charcoal.Layout` | `Style` (the CSS subset), `Length`, `Edges`, geometry, `LayoutNode`, `FlexLayout`, `StyleParser` | `Charcoal.Rendering` for `Color` only |
+| `Charcoal.Rendering` | `Color`, `TextStyle`, `TextRun`, `Cell`, `CellBuffer`, `Screen` (diff → ANSI), `TextWidth`, `TextLayout` (wrapping), `Painter`, `ITextContent`, `ICustomPaint` | `Charcoal.Layout` for `Rect`/`Style` |
+| `Charcoal.Input` | `Key`, `KeyModifiers`, `KeyEvent`, `MouseEvent`, `PasteEvent`, `FocusEvent`, `AnsiKeyParser`, `InputPump` | nothing |
+| `Charcoal.Terminal` | `ITerminal`, `ConsoleTerminal` (Unix termios + Windows VT), `HeadlessTerminal`, `TerminalOptions` | `Charcoal.Layout` for `Size` |
+| `Charcoal.Styling` | `Stylesheet`, `Selector`, `StyleResolver`, `StyleContext`, `UserAgentStylesheet`: the cascade | `Charcoal.Layout`, `Charcoal.Components` (the host tree it matches) |
+| `Charcoal.Components` | `TerminalRenderer`, `TerminalDispatcher`, host tree, `MarkupParser`, `TuiApp`, focus, event args, `EventHandlers` | everything above |
+| `Charcoal.Routing` | `TerminalNavigationManager`: the location, in memory | `Microsoft.AspNetCore.Components` |
 
 Rules between the layers:
 
@@ -295,7 +295,7 @@ component, the Razor SDK stamps a `b-…` attribute on that component's
 elements, rewrites the sheet's selectors to match it (`::deep` included),
 and bundles the project's sheets into
 `obj/…/projectbundle/<Project>.bundle.scp.css`. A web page links the bundle;
-here `build/SlopTui.targets` embeds it in the assembly, and `TuiApp.Run`
+here `build/Charcoal.targets` embeds it in the assembly, and `TuiApp.Run`
 loads the bundle of every non-framework assembly the app uses, dependencies
 first, with `AddScopedStylesheets`. To the host tree the scope is an
 ordinary attribute, matched by an ordinary attribute selector.

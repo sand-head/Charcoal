@@ -1,5 +1,5 @@
-using SlopTui.Components;
-using SlopTui.Terminal;
+using Charcoal.Components;
+using Charcoal.Terminal;
 using Transcript;
 
 // Transcript [--lines N]   N preloaded lines, 2000 by default

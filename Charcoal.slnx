@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/examples/">
+    <Project Path="examples/Counter/Counter.csproj" />
+    <Project Path="examples/Form/Form.csproj" />
+    <Project Path="examples/Hello/Hello.csproj" />
+    <Project Path="examples/Layouts/Layouts.csproj" />
+    <Project Path="examples/Picker/Picker.csproj" />
+    <Project Path="examples/Routing/Routing.csproj" />
+    <Project Path="examples/Styled/Styled.csproj" />
+    <Project Path="examples/Transcript/Transcript.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Charcoal/Charcoal.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Charcoal.Tests/Charcoal.Tests.csproj" />
+  </Folder>
+</Solution>
