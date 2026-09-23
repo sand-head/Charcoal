@@ -29,10 +29,18 @@ public enum AlignSelf { Auto, Stretch, FlexStart, Center, FlexEnd }
 public enum Overflow { Visible, Hidden, Scroll }
 
 /// <summary>
-/// CSS <c>overflow-anchor</c>. Unlike in a browser, <see cref="Auto"/> also
-/// keeps a container scrolled to its end at the end as content is appended,
-/// which is what logs and transcripts want.
+/// CSS <c>overflow-anchor</c>. On a scroll container, <see cref="None"/> turns
+/// scroll anchoring off; on any other element, it keeps the element and its
+/// descendants from being chosen as the anchor.
 /// </summary>
+/// <remarks>
+/// To keep a log pinned to the bottom, exclude every child and leave a
+/// sentinel with a height at the end:
+/// <code>
+/// .log > *       { overflow-anchor: none }
+/// .log > .bottom { overflow-anchor: auto; height: 1 }
+/// </code>
+/// </remarks>
 public enum OverflowAnchor { Auto, None }
 
 public enum Position { Relative, Absolute }

@@ -362,11 +362,24 @@ pass, because a terminal works in integers and the property set is small:
   `@ref` as in the DOM, and records its `ContentSize`. The engine does not
   clamp the offsets, and changing one re-arranges without re-measuring.
   `TuiApp` does the rest, as a browser would: between the layout and the
-  paint it clamps every container's offset to its content, follows content
-  that grew when `overflow-anchor` is `auto`, and raises one `scroll` event
-  per change. After the handlers, the wheel and the scroll keys (↑ ↓ PageUp
-  PageDown Home End on the focused container) move the offset. The element
-  exposes `ScrollTop`, `ScrollHeight`, `ClientHeight` and `ScrollTopMax`.
+  paint it applies scroll anchoring, clamps every container's offset to its
+  content, and raises one `scroll` event per change. After the handlers, the
+  wheel and the scroll keys (↑ ↓ PageUp PageDown Home End on the focused
+  container) move the offset. The element exposes `ScrollTop`,
+  `ScrollHeight`, `ClientHeight` and `ScrollTopMax`.
+- **Scroll anchoring** follows CSS Scroll Anchoring. After each layout,
+  `RecordAnchors` picks each container's anchor node: the first visible
+  element in tree order, preferring deeper and fully visible ones, skipping
+  elements with `overflow-anchor: none` and not searching nested scroll
+  containers. It records how far below the scrollport's top the anchor sits,
+  and the next layout corrects `ScrollTop` by however far it moved.
+  Anchoring only corrects for layout changes: `AnchorScrollTop` records the
+  offset the anchor was chosen at, and any scroll since then retires the
+  anchor, since otherwise the correction would undo the scroll. Pinning to
+  the bottom uses the web's stylesheet, with every child excluded and a
+  sentinel with a height at the end. A box that opens on a backlog still has
+  to be scrolled to its end once, since anchoring keeps a position but does
+  not choose one.
 - A container's cross size is measured with its items at their final main
   sizes, so a row is as tall as its rewrapped text.
 - When content overflows, `justify-content: flex-end` keeps the end in
@@ -473,9 +486,7 @@ message lands on a readable screen.
   names for it. A wrapping component would also take the element out of the
   app's CSS scope.
 - Deviations from a browser are deliberate and documented where they live:
-  `body` has no margin, replaced elements and form controls are blocks, and
-  `overflow-anchor: auto` follows content appended below a box scrolled to
-  its end.
+  `body` has no margin, and replaced elements and form controls are blocks.
 - Public types carry a short summary. Comments explain why, not what.
 - Tests are xunit, one file per type under test, named for the behaviour
   (`A_flush_with_nothing_changed_writes_nothing`).

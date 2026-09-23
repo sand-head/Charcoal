@@ -1,4 +1,9 @@
-@* A scrollable div that is focused when the page appears and follows the lines a timer appends. *@
+@*
+    A scrollable div that is focused when the page appears. It stays at the
+    bottom as a timer appends lines through the pin-to-bottom stylesheet:
+    only the sentinel at the end can be the scroll anchor, so scrolling up
+    stops the following.
+*@
 @implements IDisposable
 @inject TuiApp Tui
 
@@ -10,6 +15,7 @@
             {
                 <div class="line" @key="line"><span class="muted">@($"{line,4} ")</span>@Words[line % Words.Length]</div>
             }
+            <div class="bottom"></div>
         </div>
         <div class="state">
             <div class="heading">state</div>
@@ -26,6 +32,7 @@
     private readonly List<int> _lines = Enumerable.Range(1, 40).ToList();
     private ElementReference _box;
     private Timer? _timer;
+    private bool _started;
 
     /// <summary>The scrolling div, once it has rendered.</summary>
     private HostElement? Box => Tui.Renderer.Element(_box);
@@ -33,6 +40,14 @@
     protected override void OnInitialized()
     {
         _timer = new Timer(_ => InvokeAsync(AppendLine), null, 1000, 1000);
+    }
+
+    // Anchoring keeps a position but cannot choose one, so start at the end.
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (_started || Box is not { ScrollTopMax: > 0 } box) return;
+        _started = true;
+        box.ScrollTop = box.ScrollTopMax;
     }
 
     private void AppendLine()

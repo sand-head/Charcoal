@@ -110,8 +110,16 @@ return new TuiApp().Run<App>();
   scrolls with the wheel, and with ↑ ↓ PageUp PageDown Home End while
   focused. `ScrollTop`, `ScrollHeight` and `ClientHeight` are on the
   element, reachable through `@ref`, and `@onscroll` fires when it moves.
-  `overflow-anchor: auto`, the default, keeps a box that is scrolled to its
-  end there as content arrives; `none` turns that off.
+  Scroll anchoring (`overflow-anchor`) works as in CSS, so content growing
+  above what you are reading does not push it down. To keep a log pinned to
+  the bottom, use the same stylesheet as on the web:
+
+  ```css
+  .log > *       { overflow-anchor: none }
+  .log > .bottom { overflow-anchor: auto; height: 1 }
+  ```
+
+  Scrolling up moves the sentinel out of view, and the log stops following.
 - **Text that measures right.** Grapheme clusters and wcwidth, so CJK and
   emoji take two cells and combining marks take none. `white-space` decides
   wrapping and collapsing, and `text-overflow` decides the cut.

@@ -464,6 +464,7 @@ public sealed class TuiApp
         {
             FlexLayout.Layout(_renderer.Root.Node, _size);
         }
+        RecordAnchors();
 
         var paintStart = Stopwatch.GetTimestamp();
         _screen!.Back.Fill(Cell.Blank);
@@ -656,9 +657,9 @@ public sealed class TuiApp
     }
 
     /// <summary>
-    /// Clamps every scroll container's offset to its content after a layout,
-    /// keeps anchored containers at their end, and raises <c>scroll</c> on each
-    /// box whose offset changed since the last report.
+    /// Applies scroll anchoring after a layout, clamps every scroll container's
+    /// offset to its content, and raises <c>scroll</c> on each box whose offset
+    /// changed since the last report.
     /// </summary>
     /// <returns>Whether any offset changed, which requires another layout.</returns>
     private bool ScrollPass()
@@ -667,6 +668,7 @@ public sealed class TuiApp
         var scrolled = new List<HostElement>();
         foreach (var box in _renderer!.Root.Descendants().OfType<HostElement>().Where(e => e.IsScrollContainer))
         {
+            moved |= KeepAnchorInPlace(box);
             moved |= ClampScroll(box);
             if (box.ReportedScrollTop != box.ScrollTop)
             {
@@ -684,18 +686,73 @@ public sealed class TuiApp
         return moved;
     }
 
+    /// <summary>
+    /// Scrolls by however far the anchor node moved in the layout, so content
+    /// growing above what is in view does not push it down.
+    /// </summary>
+    private static bool KeepAnchorInPlace(HostElement box)
+    {
+        if (box.Node.Style.OverflowAnchor != OverflowAnchor.Auto) return false;
+        if (box.AnchorNode is not { } anchor || !anchor.AncestorElements().Contains(box)) return false;
+        // A scroll since the anchor was recorded was deliberate and stays.
+        if (box.Node.ScrollTop != box.AnchorScrollTop) return false;
+
+        var offset = anchor.Node.Layout.Y - box.Scrollport.Y;
+        if (offset == box.AnchorOffset) return false;
+        box.Node.ScrollTop = Math.Max(0, box.Node.ScrollTop + offset - box.AnchorOffset);
+        return true;
+    }
+
     private static bool ClampScroll(HostElement box)
     {
         var max = box.ScrollTopMax;
-        var followsEnd = box.Node.Style.OverflowAnchor == OverflowAnchor.Auto && box.AnchoredToEnd;
-        var wanted = followsEnd ? max : Math.Min(box.ScrollTop, max);
-        var moved = wanted != box.ScrollTop;
-        if (moved)
+        if (box.ScrollTop <= max) return false;
+        box.Node.ScrollTop = max;
+        return true;
+    }
+
+    /// <summary>Chooses each scroll container's anchor node from the final layout of the frame.</summary>
+    private void RecordAnchors()
+    {
+        foreach (var box in _renderer!.Root.Descendants().OfType<HostElement>().Where(e => e.IsScrollContainer))
         {
-            box.Node.ScrollTop = wanted;
+            if (box.Node.Style.OverflowAnchor == OverflowAnchor.None)
+            {
+                box.AnchorNode = null;
+                continue;
+            }
+
+            var scrollport = box.Scrollport;
+            box.AnchorNode = SelectAnchor(box, scrollport);
+            box.AnchorOffset = box.AnchorNode is { } anchor ? anchor.Node.Layout.Y - scrollport.Y : 0;
+            box.AnchorScrollTop = box.ScrollTop;
         }
-        box.AnchoredToEnd = box.ScrollTop >= max;
-        return moved;
+    }
+
+    /// <summary>
+    /// Selects the anchor node as CSS Scroll Anchoring does: the first visible
+    /// element in tree order, preferring the deepest candidate and a fully
+    /// visible one over a partly visible one. <c>overflow-anchor: none</c>
+    /// excludes an element and its descendants, and nested scroll containers
+    /// are not searched because they anchor themselves.
+    /// </summary>
+    private static HostElement? SelectAnchor(HostElement parent, Rect scrollport)
+    {
+        HostElement? partlyVisible = null;
+        foreach (var child in parent.ChildElements())
+        {
+            var style = child.Node.Style;
+            if (style.OverflowAnchor == OverflowAnchor.None || style.Display == Display.None) continue;
+
+            // A box without height cannot hold a position.
+            var rect = child.Node.Layout;
+            if (rect.Height <= 0 || rect.Bottom <= scrollport.Y || rect.Y >= scrollport.Bottom) continue;
+
+            var candidate = (child.IsScrollContainer ? null : SelectAnchor(child, scrollport)) ?? child;
+            if (rect.Y >= scrollport.Y && rect.Bottom <= scrollport.Bottom) return candidate;
+            partlyVisible ??= candidate;
+        }
+        return partlyVisible;
     }
 
     /// <summary>

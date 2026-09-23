@@ -85,6 +85,23 @@ public abstract class HostNode
     /// <summary>Text changed but the tree did not, so the cached layout children still hold.</summary>
     protected void ContentChanged() => ClosestElement?.DescendantsChanged(structural: false);
 
+    /// <summary>The nearest descendant elements, looking through component containers.</summary>
+    public IEnumerable<HostElement> ChildElements()
+    {
+        foreach (var child in _children)
+        {
+            if (child is HostElement element)
+            {
+                yield return element;
+                continue;
+            }
+            foreach (var nested in child.ChildElements())
+            {
+                yield return nested;
+            }
+        }
+    }
+
     /// <summary>Every node below this one, depth first.</summary>
     public IEnumerable<HostNode> Descendants()
     {
@@ -274,7 +291,6 @@ public sealed class HostElement : HostNode
         {
             var previous = Node.ScrollTop;
             Node.ScrollTop = Math.Clamp(value, 0, ScrollTopMax);
-            AnchoredToEnd = Node.ScrollTop >= ScrollTopMax;
             // No component re-renders for a scroll, so it requests the frame itself.
             if (Node.ScrollTop != previous) RequestRepaint();
         }
@@ -296,10 +312,21 @@ public sealed class HostElement : HostNode
     }
 
     /// <summary>
-    /// Whether the end was in view when this box was last scrolled or laid
-    /// out. It starts true so that a box that starts full shows its end.
+    /// The descendant this container is anchored to, chosen after the last
+    /// layout, and how far its top sat below the scrollport's top. Scroll
+    /// anchoring keeps that distance the same across layouts.
     /// </summary>
-    internal bool AnchoredToEnd { get; set; } = true;
+    internal HostElement? AnchorNode { get; set; }
+    internal int AnchorOffset { get; set; }
+
+    /// <summary>
+    /// The scroll offset when the anchor was recorded. Anchoring only corrects
+    /// for layout changes, so a scroll since then retires the anchor.
+    /// </summary>
+    internal int AnchorScrollTop { get; set; }
+
+    /// <summary>The content box, which is the visible part of the scrolled content.</summary>
+    internal Rect Scrollport => Node.Layout.Deflate(Node.Style.Inset);
 
     /// <summary>The offset the last <c>scroll</c> event reported.</summary>
     internal int ReportedScrollTop { get; set; }
