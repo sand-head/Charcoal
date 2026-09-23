@@ -32,6 +32,7 @@ this library.
 | `SlopTui.Terminal` | `ITerminal`, `ConsoleTerminal` (Unix termios + Windows VT), `HeadlessTerminal`, `TerminalOptions` | `SlopTui.Layout` for `Size` |
 | `SlopTui.Styling` | `Stylesheet`, `Selector`, `StyleResolver`, `StyleContext`, `UserAgentStylesheet`: the cascade | `SlopTui.Layout`, `SlopTui.Components` (the host tree it matches) |
 | `SlopTui.Components` | `TerminalRenderer`, `TerminalDispatcher`, host tree, `MarkupParser`, `TuiApp`, focus, event args, `EventHandlers` | everything above |
+| `SlopTui.Routing` | `TerminalNavigationManager`: the location, in memory | `Microsoft.AspNetCore.Components` |
 
 Rules between the layers:
 
@@ -449,6 +450,24 @@ outward: `@onclick` then `@onmousedown` for a press, and `@onmouseup`,
 `@onmousemove` and `@onwheel`. A left click focuses the nearest focusable
 element, and an unhandled wheel notch scrolls the nearest scroll container
 under the pointer. `@onfocus` and `@onblur` fire on change.
+
+**Routing** is Blazor's own. `Router`, `RouteView`, `@page` and
+`NavigationManager` live in `Microsoft.AspNetCore.Components` and need no
+browser, only a `NavigationManager` that knows the location.
+`TerminalNavigationManager` keeps it in memory, based at `tui:///` because
+route matching needs an absolute base, with a history stack for `Back()`.
+`INavigationInterception` does nothing, since the app already handles every
+click, and `IScrollToLocationHash` does not scroll yet.
+
+`<a href>` is a plain element with `Href` and `IsLink` on `HostElement`. The
+user-agent sheet underlines it, and it is focusable and tabbable without a
+`tabindex`, as on a page. Enter or a left click that no handler took calls
+`NavigateTo`, as `blazor.web.js` does with an intercepted click. Links with a
+scheme outside the app are raised on `TuiApp.LinkFollowed` and otherwise left
+alone. The scheme is parsed by hand, because on Unix
+`Uri.TryCreate(href, UriKind.Absolute, …)` reads `/settings` as
+`file:///settings`. `Router` injects `ILoggerFactory`, so the app registers
+its logger factory as a service.
 
 **Mouse selection** (`MouseSelection`, `TuiApp.Selection`) handles the mouse
 events no handler took. A left press anchors a selection unless

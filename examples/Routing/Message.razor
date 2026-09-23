@@ -1,0 +1,9 @@
+@page "/inbox/{Id:int}"
+
+<h1>message @Id</h1>
+<p>Route parameters are the router's, typed constraint and all.</p>
+<p><a href="/inbox">back to the inbox</a></p>
+
+@code {
+    [Parameter] public int Id { get; set; }
+}

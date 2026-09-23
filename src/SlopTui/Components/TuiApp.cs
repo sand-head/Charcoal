@@ -2,12 +2,14 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using SlopTui.Input;
 using SlopTui.Layout;
 using SlopTui.Rendering;
+using SlopTui.Routing;
 using SlopTui.Styling;
 using SlopTui.Terminal;
 
@@ -29,6 +31,12 @@ public sealed record TuiAppOptions
 
     /// <summary>Whether dragging the mouse selects text; see <see cref="TuiApp.Selection"/>.</summary>
     public bool MouseSelection { get; init; } = true;
+
+    /// <summary>
+    /// The app's location for <c>@page</c> routing. By default a
+    /// <see cref="TerminalNavigationManager"/> starting at <c>tui:///</c>.
+    /// </summary>
+    public TerminalNavigationManager? Navigation { get; init; }
 
     /// <summary>The rows one notch of the mouse wheel scrolls.</summary>
     public int WheelRows { get; init; } = 3;
@@ -66,6 +74,7 @@ public sealed class TuiApp
     private Size _size;
     private string _startup = "";
     private bool _sixelRepaint;
+    private TerminalNavigationManager? _navigation;
 
     public TuiApp(ITerminal? terminal = null, TuiAppOptions? options = null, ILoggerFactory? loggerFactory = null)
     {
@@ -75,10 +84,28 @@ public sealed class TuiApp
         Services.AddSingleton(this);
         Services.AddSingleton(_terminal);
         Services.AddSingleton(Graphics);
+        // Components, including Blazor's Router, can ask for loggers.
+        Services.AddSingleton(_loggerFactory);
+        Services.AddSingleton(typeof(ILogger<>), typeof(Logger<>));
+        // Unused unless the app has a Router.
+        Services.AddSingleton(_ => _options.Navigation ?? new TerminalNavigationManager());
+        Services.AddSingleton<NavigationManager>(provider => provider.GetRequiredService<TerminalNavigationManager>());
+        Services.AddSingleton<INavigationInterception, TerminalNavigationManager.Interception>();
+        Services.AddSingleton<IScrollToLocationHash, TerminalNavigationManager.NoHashScrolling>();
     }
 
     /// <summary>The terminal's picture capabilities and the images sent to it.</summary>
     public Graphics Graphics { get; } = new();
+
+    /// <summary>The app's <see cref="NavigationManager"/>, for navigating from outside a component.</summary>
+    public TerminalNavigationManager Navigation =>
+        _navigation ?? throw new InvalidOperationException("The app is not running.");
+
+    /// <summary>
+    /// Raised when a link is activated, before it is followed. Links outside
+    /// the app, such as <c>https:</c> or <c>mailto:</c>, are only reported here.
+    /// </summary>
+    public event Action<HostElement>? LinkFollowed;
 
     /// <summary>The text the mouse has selected. A release copies it to the clipboard.</summary>
     public MouseSelection Selection { get; } = new();
@@ -273,6 +300,9 @@ public sealed class TuiApp
         _dispatcher.BindToCurrentThread();
         if (ScopedStylesheets) LoadScopedStylesheets();
         var provider = Services.BuildServiceProvider();
+        _navigation = provider.GetRequiredService<TerminalNavigationManager>();
+        // Navigation from outside a component re-renders without marking the tree dirty.
+        _navigation.LocationChanged += (_, _) => Invalidate();
         _renderer = new TerminalRenderer(provider, _loggerFactory, _dispatcher, OnException, _styles);
         _focus = new FocusManager(_renderer.Root, NotifyFocusAsync, work => _dispatcher.Post(work), _styles);
         _focus.Changed += (previous, current) => _renderer.FocusChanged(previous, current);
@@ -593,6 +623,12 @@ public sealed class TuiApp
             }
         }
 
+        if (key.Key == Key.Enter && !key.Ctrl && !key.Alt && _focus.Focused is { IsLink: true } link)
+        {
+            Follow(link);
+            return;
+        }
+
         // Scroll keys go to the nearest scrollable ancestor of the focus. Fields
         // have already taken their own keys above.
         if (ScrollableFrom(_focus.Focused) is { } scroller && ScrollTargetFor(scroller, key) is { } scrollTop)
@@ -684,6 +720,46 @@ public sealed class TuiApp
             _ = _dispatcher.Post(() => _renderer.RaiseAsync(box, "onscroll", new ScrollEventArgs(box)));
         }
         return moved;
+    }
+
+    private static HostElement? NearestLink(HostElement from) =>
+        from.IsLink ? from : from.AncestorElements().FirstOrDefault(e => e.IsLink);
+
+    /// <summary>
+    /// Navigates to a link's <c>href</c> if the app's router can handle it,
+    /// as <c>blazor.web.js</c> does with an intercepted click. Other links are
+    /// left to <see cref="LinkFollowed"/> handlers rather than opening a browser.
+    /// </summary>
+    private void Follow(HostElement link)
+    {
+        var href = link.Href!;
+        LinkFollowed?.Invoke(link);
+        if (_navigation is null || !IsInternal(href)) return;
+        _navigation.NavigateTo(href);
+    }
+
+    /// <summary>Whether an href is a relative reference or an absolute URI under the app's base.</summary>
+    private bool IsInternal(string href)
+    {
+        if (href.Length == 0) return false;
+        return !HasScheme(href) || href.StartsWith(_navigation!.BaseUri, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Whether a URI reference starts with a scheme, per RFC 3986.
+    /// <c>Uri.TryCreate</c> cannot tell, because on Unix it reads <c>/settings</c>
+    /// as <c>file:///settings</c>.
+    /// </summary>
+    private static bool HasScheme(string href)
+    {
+        var colon = href.IndexOf(':');
+        if (colon <= 0 || !char.IsAsciiLetter(href[0])) return false;
+        for (var i = 1; i < colon; i++)
+        {
+            var c = href[i];
+            if (!char.IsAsciiLetterOrDigit(c) && c is not ('+' or '-' or '.')) return false;
+        }
+        return true;
     }
 
     /// <summary>
@@ -907,6 +983,12 @@ public sealed class TuiApp
         if (args.Handled) return;
 
         var leftPress = mouse.Action == MouseAction.Pressed && mouse.Button == MouseButton.Left;
+        // Links often wrap their text in other inline elements.
+        if (leftPress && NearestLink(target) is { } link)
+        {
+            Follow(link);
+            return;
+        }
         if (leftPress && target.Control is { } control && control.Click(mouse.X, mouse.Y))
         {
             _renderer.Dirty = true;

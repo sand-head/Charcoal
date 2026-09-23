@@ -203,6 +203,7 @@ public sealed class HostElement : HostNode
         IsImage = Name == "img";
         IsCanvas = Name == "canvas";
         IsControl = Name is "input" or "textarea";
+        IsAnchor = Name == "a";
         Node = ElementLayoutNode.For(this);
         _styles = styles;
         _deferred = deferred;
@@ -237,6 +238,14 @@ public sealed class HostElement : HostNode
 
     /// <summary>Whether this is an <c>&lt;input&gt;</c> or a <c>&lt;textarea&gt;</c>.</summary>
     public bool IsControl { get; }
+
+    /// <summary>Whether this is an <c>&lt;a&gt;</c>, which is only a link when it has an <see cref="Href"/>.</summary>
+    public bool IsAnchor { get; }
+
+    public string? Href { get; private set; }
+
+    /// <summary>Whether this is an anchor with somewhere to go, which is focusable and followed when activated.</summary>
+    public bool IsLink => IsAnchor && Href is { Length: > 0 };
 
     /// <summary>The form control's text, caret and attributes, or null for other elements.</summary>
     public TextControlLayoutNode? Control => Node as TextControlLayoutNode;
@@ -485,10 +494,12 @@ public sealed class HostElement : HostNode
         Classes = _attributes.TryGetValue("class", out var classes) ? ParseClasses(classes) : NoClasses;
         InlineStyle = _attributes.TryGetValue("style", out var style) && style is string { Length: > 0 } css ? css : null;
         var tabIndex = _attributes.TryGetValue("tabindex", out var tab) ? ParseTabIndex(tab) : null;
-        // Enabled form controls are focusable and tabbable without a tabindex.
+        Href = IsAnchor && _attributes.TryGetValue("href", out var href) ? href?.ToString() : null;
+        // Links and enabled form controls are focusable and tabbable without a tabindex.
         var enabledControl = IsControl && _attributes.GetValueOrDefault("disabled") is null or false;
-        Focusable = tabIndex is not null || enabledControl;
-        Tabbable = tabIndex is >= 0 || (enabledControl && tabIndex is null);
+        var interactive = enabledControl || IsLink;
+        Focusable = tabIndex is not null || interactive;
+        Tabbable = tabIndex is >= 0 || (interactive && tabIndex is null);
         Autofocus = _attributes.GetValueOrDefault("autofocus") is not (null or false);
         _caret = _attributes.TryGetValue("caret", out var caret) ? ParseCaret(caret) : null;
     }
@@ -679,14 +690,23 @@ public sealed class HostElement : HostNode
 
     public void Paint(CellBuffer buffer, Rect rect) => Painter?.Invoke(buffer, rect);
 
-    /// <summary>The deepest box containing the point, or null. Inline runs are hit through their block.</summary>
+    /// <summary>
+    /// The deepest box containing the point, or null. Inline runs are hit
+    /// through their block, except for an inline element that a flex or grid
+    /// container gave a box of its own, such as a link in a nav bar.
+    /// </summary>
     public HostElement? HitTest(int x, int y)
     {
         if (Node.Style.Display == Display.None || !Node.Layout.Contains(x, y)) return null;
         for (var i = LayoutChildren.Count - 1; i >= 0; i--)
         {
-            if (LayoutChildren[i] is not ElementLayoutNode child) continue;
-            if (child.Element.HitTest(x, y) is { } hit) return hit;
+            switch (LayoutChildren[i])
+            {
+                case ElementLayoutNode child when child.Element.HitTest(x, y) is { } hit:
+                    return hit;
+                case AnonymousTextNode { BlockifiedElement: { } inline } text when text.Layout.Contains(x, y):
+                    return inline;
+            }
         }
         return this;
     }
@@ -740,6 +760,9 @@ public sealed class AnonymousTextNode : LayoutNode, ITextContent
 
     /// <summary>The text nodes and inline elements, in order.</summary>
     public IReadOnlyList<HostNode> Parts => _parts;
+
+    /// <summary>The inline element this box holds alone, when a flex or grid container blockified it.</summary>
+    internal HostElement? BlockifiedElement => _parts is [HostElement only] ? only : null;
 
     public override IReadOnlyList<LayoutNode> Children => [];
 

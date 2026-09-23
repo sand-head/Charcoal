@@ -125,6 +125,12 @@ return new TuiApp().Run<App>();
 - **Text that measures right.** Grapheme clusters and wcwidth, so CJK and
   emoji take two cells and combining marks take none. `white-space` decides
   wrapping and collapsing, and `text-overflow` decides the cut.
+- **Routing.** Blazor's own `@page`, `<Router>`, `<RouteView>`,
+  `NavigationManager` and `NavigateTo`. Without an address bar,
+  `TerminalNavigationManager` keeps the location in memory at `tui:///`.
+  `<a href>` is underlined, tabbable without a `tabindex`, and followed by
+  Enter or a click. Links outside the app, such as `https://` or `mailto:`,
+  are only reported through `TuiApp.LinkFollowed`.
 - **Events.** The DOM's names: `@onkeydown`, `@onclick`, `@onmousedown`,
   `@onmouseup`, `@onmousemove`, `@onwheel`, `@onscroll`, `@onfocus`,
   `@onblur`, `@onpaste`, `@oninput` and `@onchange`. Keys go to the focused
@@ -211,8 +217,12 @@ the web. See [docs/design.md](docs/design.md) for details.
 
 iTerm2 inline images; `!important`; pseudo-elements; `margin: auto`
 centring; horizontal scrolling with the wheel and keys, though the node's
-`ScrollLeft` works; `keyup`, which terminals do not report; list markers;
-and clicks on inline elements, which go to the block that holds them.
+`ScrollLeft` works; `keyup`, which terminals do not report; OSC 8
+hyperlinks for external links; scrolling to a `#fragment`, which still
+matches a route; list markers; and clicks on inline elements inside text,
+which go to the block that holds them. An inline element that a flex or
+grid container gives its own box, such as a link in a nav bar, is
+clickable.
 
 ## Building
 

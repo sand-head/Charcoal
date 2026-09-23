@@ -7,7 +7,8 @@ namespace SlopTui.Styling;
 /// <remarks>
 /// Unlike a browser's, <c>body</c> has no margin, and <c>img</c>, <c>canvas</c>
 /// and the form controls are blocks that fit their content, since a picture
-/// or a field cannot sit inside a line of text.
+/// or a field cannot sit inside a line of text. Links are underlined but
+/// not coloured, leaving the terminal's few colours to the app.
 /// </remarks>
 public static class UserAgentStylesheet
 {
@@ -24,6 +25,7 @@ public static class UserAgentStylesheet
         h1, h2, h3, h4, h5, h6, strong, b, th { font-weight: bold }
         em, i, cite, dfn, var, address { font-style: italic }
         u, ins { text-decoration: underline }
+        a[href] { text-decoration: underline }
         s, del, strike { text-decoration: line-through }
         mark { background-color: yellow; color: black }
 

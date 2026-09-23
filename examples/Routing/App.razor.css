@@ -1,0 +1,7 @@
+.app { padding: 0 1; height: 100%; display: flex; flex-direction: column }
+.bar { display: flex; gap: 2 }
+.brand { font-weight: bold; color: green }
+.muted { opacity: 0.5 }
+.bar a { color: cyan }
+.bar a:focus { color: black; background-color: cyan }
+hr { margin: 0 }
