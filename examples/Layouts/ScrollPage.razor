@@ -1,20 +1,21 @@
-@* A ScrollBox that is focused when the page appears and follows the lines a timer appends. *@
+@* A scrollable div that is focused when the page appears and follows the lines a timer appends. *@
 @implements IDisposable
+@inject TuiApp Tui
 
 <div class="page">
     <div class="muted">↑ ↓ PageUp PageDown Home End scroll the box; the wheel too. A line is appended every second; End sticks to the bottom.</div>
     <div class="row">
-        <ScrollBox @ref="_scroller" class="scroller" StickToBottom="true" Autofocus="true" ScrollTopChanged="StateHasChanged">
+        <div @ref="_box" class="scroller" tabindex="0" autofocus @onscroll="StateHasChanged">
             @foreach (var line in _lines)
             {
                 <div class="line" @key="line"><span class="muted">@($"{line,4} ")</span>@Words[line % Words.Length]</div>
             }
-        </ScrollBox>
+        </div>
         <div class="state">
             <div class="heading">state</div>
-            <div class="muted">position @(_scroller?.Position ?? 0)</div>
-            <div class="muted">max @(_scroller?.MaxScroll ?? 0)</div>
-            <div class="muted">@(_scroller?.AtEnd == true ? "at the end (sticky)" : "scrolled up (unstuck)")</div>
+            <div class="muted">scrollTop @(Box?.ScrollTop ?? 0)</div>
+            <div class="muted">max @(Box?.ScrollTopMax ?? 0)</div>
+            <div class="muted">@(Box is null || Box.ScrollTop >= Box.ScrollTopMax ? "at the end (anchored)" : "scrolled up (unanchored)")</div>
             <div class="muted">@_lines.Count lines</div>
         </div>
     </div>
@@ -23,8 +24,11 @@
 @code {
     private static readonly string[] Words = ["the quick brown fox", "jumps over", "the lazy dog", "while the scroll box", "keeps the end in view", "until you scroll up"];
     private readonly List<int> _lines = Enumerable.Range(1, 40).ToList();
-    private ScrollBox? _scroller;
+    private ElementReference _box;
     private Timer? _timer;
+
+    /// <summary>The scrolling div, once it has rendered.</summary>
+    private HostElement? Box => Tui.Renderer.Element(_box);
 
     protected override void OnInitialized()
     {

@@ -1,6 +1,6 @@
 .page { display: flex; flex-direction: column; flex: 1; gap: 1; padding: 0 1 }
 .row { display: flex; flex: 1; gap: 1 }
-.page ::deep .scroller { flex: 1; border: solid green; padding: 0 1 }
+.scroller { overflow: auto; flex: 1; border: solid green; padding: 0 1 }
 .line { white-space: pre }
 .state { display: flex; flex-direction: column; gap: 1; width: 30; border: solid bright-black; padding: 0 1 }
 .heading { font-weight: bold }

@@ -4,9 +4,13 @@ using SlopTui.Input;
 namespace SlopTui.Components;
 
 /// <summary>A key press, delivered to the focused element and then its ancestors.</summary>
-public sealed class KeyPressEventArgs : EventArgs
+/// <remarks>
+/// There is no <c>keyup</c>, because terminals only report keys going down
+/// unless the kitty protocol's release mode is on.
+/// </remarks>
+public sealed class KeyboardEventArgs : EventArgs
 {
-    public KeyPressEventArgs(KeyEvent key) => Key = key;
+    public KeyboardEventArgs(KeyEvent key) => Key = key;
 
     public KeyEvent Key { get; }
 
@@ -15,7 +19,7 @@ public sealed class KeyPressEventArgs : EventArgs
 }
 
 /// <summary>A mouse action over an element.</summary>
-public sealed class MouseEventArgs : EventArgs
+public class MouseEventArgs : EventArgs
 {
     public MouseEventArgs(MouseEvent mouse, HostElement target)
     {
@@ -31,15 +35,34 @@ public sealed class MouseEventArgs : EventArgs
     public int LocalX => Mouse.X - Target.Node.Layout.X;
     public int LocalY => Mouse.Y - Target.Node.Layout.Y;
 
+    public MouseButton Button => Mouse.Button;
+
     public bool Handled { get; set; }
 }
 
-/// <summary>An element gained or lost focus.</summary>
+/// <summary>A turn of the mouse wheel over an element.</summary>
+public sealed class WheelEventArgs : MouseEventArgs
+{
+    public WheelEventArgs(MouseEvent mouse, HostElement target) : base(mouse, target) { }
+
+    /// <summary>The rows to scroll: negative up, positive down.</summary>
+    public int DeltaY => Mouse.Action == MouseAction.WheelUp ? -1 : 1;
+}
+
+/// <summary>An element gained focus (<c>focus</c>) or lost it (<c>blur</c>).</summary>
 public sealed class FocusEventArgs : EventArgs
 {
-    public FocusEventArgs(bool gained) => Gained = gained;
+}
 
-    public bool Gained { get; }
+/// <summary>A scroll container's offset changed.</summary>
+public sealed class ScrollEventArgs : EventArgs
+{
+    public ScrollEventArgs(HostElement target) => Target = target;
+
+    public HostElement Target { get; }
+
+    /// <summary>The new offset in rows.</summary>
+    public int ScrollTop => Target.ScrollTop;
 }
 
 /// <summary>A paste arrived while an element was focused.</summary>
@@ -53,9 +76,13 @@ public sealed class PasteEventArgs : EventArgs
 }
 
 /// <summary>Declares the element events and their argument types to the Razor compiler.</summary>
-[EventHandler("onkeypress", typeof(KeyPressEventArgs), true, true)]
+[EventHandler("onkeydown", typeof(KeyboardEventArgs), true, true)]
 [EventHandler("onclick", typeof(MouseEventArgs), true, true)]
-[EventHandler("onmouse", typeof(MouseEventArgs), true, true)]
+[EventHandler("onmousedown", typeof(MouseEventArgs), true, true)]
+[EventHandler("onmouseup", typeof(MouseEventArgs), true, true)]
+[EventHandler("onmousemove", typeof(MouseEventArgs), true, true)]
+[EventHandler("onwheel", typeof(WheelEventArgs), true, true)]
+[EventHandler("onscroll", typeof(ScrollEventArgs), true, true)]
 [EventHandler("onfocus", typeof(FocusEventArgs), true, true)]
 [EventHandler("onblur", typeof(FocusEventArgs), true, true)]
 [EventHandler("onpaste", typeof(PasteEventArgs), true, true)]

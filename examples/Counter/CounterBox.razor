@@ -1,5 +1,5 @@
 @* A focusable counter that takes + and − while focused. :focus in the scoped sheet shows which one has the keyboard. *@
-<div class="counter" tabindex="0" @onkeypress="OnKey" @onclick="OnClick">
+<div class="counter" tabindex="0" @onkeydown="OnKey" @onclick="OnClick">
     <div class="name">@Model.Name</div>
     <div class="value">@Model.Value</div>
 </div>
@@ -7,7 +7,7 @@
 @code {
     [Parameter, EditorRequired] public App.CounterModel Model { get; set; } = default!;
 
-    private void OnKey(KeyPressEventArgs e)
+    private void OnKey(KeyboardEventArgs e)
     {
         switch (e.Key.Text)
         {

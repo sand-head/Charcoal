@@ -21,7 +21,7 @@ this library.
                                                │
                                                ▼
                                           Screen.Flush() ──► one write ──► ITerminal
- ITerminal input thread ──► AnsiKeyParser ──► InputEvent ──► focus/bubbling ──► @onkeypress …
+ ITerminal input thread ──► AnsiKeyParser ──► InputEvent ──► focus/bubbling ──► @onkeydown …
 ```
 
 | Namespace | Owns | Depends on |
@@ -31,7 +31,7 @@ this library.
 | `SlopTui.Input` | `Key`, `KeyModifiers`, `KeyEvent`, `MouseEvent`, `PasteEvent`, `FocusEvent`, `AnsiKeyParser`, `InputPump` | nothing |
 | `SlopTui.Terminal` | `ITerminal`, `ConsoleTerminal` (Unix termios + Windows VT), `HeadlessTerminal`, `TerminalOptions` | `SlopTui.Layout` for `Size` |
 | `SlopTui.Styling` | `Stylesheet`, `Selector`, `StyleResolver`, `StyleContext`, `UserAgentStylesheet`: the cascade | `SlopTui.Layout`, `SlopTui.Components` (the host tree it matches) |
-| `SlopTui.Components` | `TerminalRenderer`, `TerminalDispatcher`, host tree, `MarkupParser`, `TuiApp`, `ScrollBox`, `Canvas`, focus, event args, `EventHandlers` | everything above |
+| `SlopTui.Components` | `TerminalRenderer`, `TerminalDispatcher`, host tree, `MarkupParser`, `TuiApp`, focus, event args, `EventHandlers` | everything above |
 
 Rules between the layers:
 
@@ -184,10 +184,11 @@ terminal cursor. Enabled controls are focusable and tabbable without a
 `tabindex`, and `autofocus` takes focus when the element appears and nothing
 else has it. `:disabled`, `:enabled` and `:placeholder-shown` match them.
 
-**`canvas`** is a leaf painted by a delegate on the element (`Painter`). The
-`Canvas` component captures its element with `@ref` and sets the delegate
-after each render, so a component can draw a whole region, such as a chart,
-without a node per cell. It is sized and placed by style like any element.
+**`canvas`** is a leaf painted by a delegate on the element (`Painter`). A
+component captures the element with `@ref` and sets the delegate after its
+first render, as a page reaches a canvas's context, so it can draw a whole
+region, such as a chart, without a node per cell. It is sized and placed by
+style like any element.
 
 ## Styles
 
@@ -359,9 +360,13 @@ pass, because a terminal works in integers and the property set is small:
 - **Scrolling.** A box with `overflow: scroll` or `hidden` shifts its
   children by the node's `ScrollTop` and `ScrollLeft`, which are set through
   `@ref` as in the DOM, and records its `ContentSize`. The engine does not
-  clamp the offsets, and changing one re-arranges without re-measuring. The
-  `ScrollBox` component clamps them and handles the arrow and page keys,
-  the wheel, `ScrollTop` and `StickToBottom`.
+  clamp the offsets, and changing one re-arranges without re-measuring.
+  `TuiApp` does the rest, as a browser would: between the layout and the
+  paint it clamps every container's offset to its content, follows content
+  that grew when `overflow-anchor` is `auto`, and raises one `scroll` event
+  per change. After the handlers, the wheel and the scroll keys (↑ ↓ PageUp
+  PageDown Home End on the focused container) move the offset. The element
+  exposes `ScrollTop`, `ScrollHeight`, `ClientHeight` and `ScrollTopMax`.
 - A container's cross size is measured with its items at their final main
   sizes, so a row is as tall as its rewrapped text.
 - When content overflows, `justify-content: flex-end` keeps the end in
@@ -406,7 +411,7 @@ and paste bodies, decodes SGR mouse, CSI/SS3 keys, kitty keyboard sequences,
 and swallows terminal replies. `InputPump` feeds it from the thread's queue
 on the app loop and ticks it so a pending ESC expires.
 
-Routing on the app loop: a key goes to the focused element's `@onkeypress`,
+Routing on the app loop: a key goes to the focused element's `@onkeydown`,
 then bubbles to each ancestor's, then to the root's; the first handler that
 sets `Handled` stops it. Focus lives in `FocusManager`: an element with a
 `tabindex` can take focus, and one with a non-negative `tabindex` is in the
@@ -414,7 +419,7 @@ Tab cycle, in tree order. `Tab` and `Shift+Tab` move focus unless a handler
 took the key.
 
 A key no handler took goes to the focused form control before those
-defaults, as on a page, so a component's `@onkeypress` can turn Enter or Up
+defaults, as on a page, so a component's `@onkeydown` can turn Enter or Up
 into a submit or a history recall. An edit raises `@oninput` with the value.
 Unhandled pastes go in at the caret, and an unhandled left click places the
 caret. Enter in an `input` and losing focus raise `@onchange` when the value
@@ -426,10 +431,11 @@ Razor compiler only generates element bind code when
 `BindInputElementAttribute` is in the compilation, so the library references
 `Microsoft.AspNetCore.Components.Web` without importing its namespace.
 
-Mouse events hit-test the arranged tree and dispatch `@onclick`
-(and `@onmouse` for everything else) from the deepest box outward; a left
-click focuses the nearest focusable element. `@onfocus` / `@onblur` fire on
-change.
+Mouse events hit-test the arranged tree and dispatch from the deepest box
+outward: `@onclick` then `@onmousedown` for a press, and `@onmouseup`,
+`@onmousemove` and `@onwheel`. A left click focuses the nearest focusable
+element, and an unhandled wheel notch scrolls the nearest scroll container
+under the pointer. `@onfocus` and `@onblur` fire on change.
 
 **Mouse selection** (`MouseSelection`, `TuiApp.Selection`) handles the mouse
 events no handler took. A left press anchors a selection unless
@@ -462,6 +468,14 @@ message lands on a readable screen.
 - Public API is `PascalCase`. Elements, attributes and properties use the
   HTML and CSS names; terminal-only features (dim, inverse, the caret) use
   the closest standard construct.
+- The library ships no components. Behaviour a browser supplies, such as
+  editing a field or scrolling a box, lives behind the element that HTML
+  names for it. A wrapping component would also take the element out of the
+  app's CSS scope.
+- Deviations from a browser are deliberate and documented where they live:
+  `body` has no margin, replaced elements and form controls are blocks, and
+  `overflow-anchor: auto` follows content appended below a box scrolled to
+  its end.
 - Public types carry a short summary. Comments explain why, not what.
 - Tests are xunit, one file per type under test, named for the behaviour
   (`A_flush_with_nothing_changed_writes_nothing`).

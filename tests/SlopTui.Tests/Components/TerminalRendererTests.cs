@@ -216,22 +216,22 @@ public class TerminalRendererTests
     public async Task Event_handlers_are_recorded_on_the_element_and_dispatch_to_the_component()
     {
         var (renderer, _) = Make();
-        KeyPressEventArgs? received = null;
+        KeyboardEventArgs? received = null;
         var root = Root(renderer, typeof(Fragment), Body(b =>
         {
             b.OpenElement(0, "div");
-            b.AddAttribute(1, "onkeypress", EventCallback.Factory.Create<KeyPressEventArgs>(new object(), e => received = e));
+            b.AddAttribute(1, "onkeydown", EventCallback.Factory.Create<KeyboardEventArgs>(new object(), e => received = e));
             b.AddAttribute(2, "tabindex", 0);
             b.CloseElement();
         }));
 
         var div = Elements(root).First(e => e.Name == "div");
         Assert.True(div.Focusable);
-        Assert.NotNull(div.HandlerFor("onkeypress"));
-        Assert.Same(div, renderer.OwnerOf(div.HandlerFor("onkeypress")!.Value));
+        Assert.NotNull(div.HandlerFor("onkeydown"));
+        Assert.Same(div, renderer.OwnerOf(div.HandlerFor("onkeydown")!.Value));
 
-        var args = new KeyPressEventArgs(new KeyEvent(Key.Enter, KeyModifiers.None, ""));
-        Assert.True(await renderer.RaiseAsync(div, "onkeypress", args));
+        var args = new KeyboardEventArgs(new KeyEvent(Key.Enter, KeyModifiers.None, ""));
+        Assert.True(await renderer.RaiseAsync(div, "onkeydown", args));
         Assert.Same(args, received);
         Assert.False(await renderer.RaiseAsync(div, "onclick", args));
     }

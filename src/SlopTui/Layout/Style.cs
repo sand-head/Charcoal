@@ -27,6 +27,14 @@ public enum AlignSelf { Auto, Stretch, FlexStart, Center, FlexEnd }
 /// <see cref="Visible"/> box keeps its content's size as its minimum.
 /// </summary>
 public enum Overflow { Visible, Hidden, Scroll }
+
+/// <summary>
+/// CSS <c>overflow-anchor</c>. Unlike in a browser, <see cref="Auto"/> also
+/// keeps a container scrolled to its end at the end as content is appended,
+/// which is what logs and transcripts want.
+/// </summary>
+public enum OverflowAnchor { Auto, None }
+
 public enum Position { Relative, Absolute }
 
 /// <summary>CSS <c>visibility</c>: a hidden box keeps its place and paints nothing.</summary>
@@ -187,6 +195,7 @@ public sealed record Style
     public int RowGap { get; init; }
     public int ColumnGap { get; init; }
     public Overflow Overflow { get; init; } = Overflow.Visible;
+    public OverflowAnchor OverflowAnchor { get; init; } = OverflowAnchor.Auto;
     public Visibility Visibility { get; init; } = Visibility.Visible;
 
     public UserSelect UserSelect { get; init; } = UserSelect.Auto;

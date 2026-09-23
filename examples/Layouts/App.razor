@@ -1,6 +1,6 @@
 @inject TuiApp Tui
 
-<div class="app" tabindex="0" @onkeypress="OnKey">
+<div class="app" tabindex="0" @onkeydown="OnKey">
     <div class="header">
         <span class="title">sloptui layouts</span>
         <span class="muted">page @(_page + 1)/@Titles.Length · @Titles[_page] · ← → to browse · q to quit</span>
@@ -29,7 +29,7 @@
 
     private int _page;
 
-    private void OnKey(KeyPressEventArgs e)
+    private void OnKey(KeyboardEventArgs e)
     {
         e.Handled = true;
         if (e.Key.Key == Key.Right)

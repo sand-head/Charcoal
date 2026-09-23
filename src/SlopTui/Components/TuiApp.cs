@@ -30,6 +30,9 @@ public sealed record TuiAppOptions
     /// <summary>Whether dragging the mouse selects text; see <see cref="TuiApp.Selection"/>.</summary>
     public bool MouseSelection { get; init; } = true;
 
+    /// <summary>The rows one notch of the mouse wheel scrolls.</summary>
+    public int WheelRows { get; init; } = 3;
+
     public static readonly TuiAppOptions Default = new();
 }
 
@@ -38,9 +41,10 @@ public sealed record TuiAppOptions
 /// </summary>
 /// <remarks>
 /// The thread that calls <see cref="Run{TRoot}"/> is the Blazor dispatcher,
-/// routes input and paints. Keys go to the focused element and bubble up
-/// through its ancestors until a handler sets <c>Handled</c>. An exception
-/// from a component ends the loop and is rethrown once the terminal is restored.
+/// routes input and paints. Keys go to the focused element's <c>@onkeydown</c>
+/// and bubble up through its ancestors until a handler sets <c>Handled</c>. An
+/// exception from a component ends the loop and is rethrown once the terminal
+/// is restored.
 /// </remarks>
 public sealed class TuiApp
 {
@@ -363,7 +367,7 @@ public sealed class TuiApp
         {
             await CommitAsync(element);
         }
-        await _renderer!.RaiseAsync(element, gained ? "onfocus" : "onblur", new FocusEventArgs(gained));
+        await _renderer!.RaiseAsync(element, gained ? "onfocus" : "onblur", new FocusEventArgs());
     }
 
     /// <summary>
@@ -453,6 +457,12 @@ public sealed class TuiApp
         if (_styles.UsesContainer)
         {
             ContainerPass();
+        }
+        // Scrolling needs the sizes from the layout, and moving an offset
+        // needs another arrangement before the paint.
+        if (ScrollPass())
+        {
+            FlexLayout.Layout(_renderer.Root.Node, _size);
         }
 
         var paintStart = Stopwatch.GetTimestamp();
@@ -562,8 +572,8 @@ public sealed class TuiApp
 
     private async Task RouteKeyAsync(KeyEvent key)
     {
-        var args = new KeyPressEventArgs(key);
-        await BubbleAsync(_focus!.Focused, "onkeypress", args, () => args.Handled);
+        var args = new KeyboardEventArgs(key);
+        await BubbleAsync(_focus!.Focused, "onkeydown", args, () => args.Handled);
         if (args.Handled) return;
 
         // Fields edit with the keys the handlers left. Enter in an input
@@ -580,6 +590,15 @@ public sealed class TuiApp
                 if (edited) await InputAsync(field);
                 return;
             }
+        }
+
+        // Scroll keys go to the nearest scrollable ancestor of the focus. Fields
+        // have already taken their own keys above.
+        if (ScrollableFrom(_focus.Focused) is { } scroller && ScrollTargetFor(scroller, key) is { } scrollTop)
+        {
+            scroller.ScrollTop = scrollTop;
+            _renderer!.Dirty = true;
+            return;
         }
 
         // Ctrl+C copies while something is selected, and exits otherwise.
@@ -603,6 +622,80 @@ public sealed class TuiApp
             return;
         }
         if (_options.ExitOnCtrlC && key.IsCtrl('c')) Exit();
+    }
+
+    /// <summary>
+    /// The scroll offset a key moves a scroll container to, or null when the
+    /// key does not scroll.
+    /// </summary>
+    private static int? ScrollTargetFor(HostElement box, KeyEvent key)
+    {
+        if (key.Ctrl || key.Alt) return null;
+
+        var page = Math.Max(1, box.ClientHeight - 1);
+        return key.Key switch
+        {
+            Key.Up => box.ScrollTop - 1,
+            Key.Down => box.ScrollTop + 1,
+            Key.PageUp => box.ScrollTop - page,
+            Key.PageDown => box.ScrollTop + page,
+            Key.Home => 0,
+            Key.End => box.ScrollTopMax,
+            _ => null,
+        };
+    }
+
+    /// <summary>The nearest scroll container at or above an element that has room to scroll.</summary>
+    private static HostElement? ScrollableFrom(HostElement? from)
+    {
+        for (var element = from; element is not null; element = element.AncestorElements().FirstOrDefault())
+        {
+            if (element.IsScrollContainer && element.ScrollTopMax > 0) return element;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Clamps every scroll container's offset to its content after a layout,
+    /// keeps anchored containers at their end, and raises <c>scroll</c> on each
+    /// box whose offset changed since the last report.
+    /// </summary>
+    /// <returns>Whether any offset changed, which requires another layout.</returns>
+    private bool ScrollPass()
+    {
+        var moved = false;
+        var scrolled = new List<HostElement>();
+        foreach (var box in _renderer!.Root.Descendants().OfType<HostElement>().Where(e => e.IsScrollContainer))
+        {
+            moved |= ClampScroll(box);
+            if (box.ReportedScrollTop != box.ScrollTop)
+            {
+                box.ReportedScrollTop = box.ScrollTop;
+                scrolled.Add(box);
+            }
+        }
+
+        // Handlers run after the frame, so one that re-renders does not
+        // re-enter the batch being painted.
+        foreach (var box in scrolled)
+        {
+            _ = _dispatcher.Post(() => _renderer.RaiseAsync(box, "onscroll", new ScrollEventArgs(box)));
+        }
+        return moved;
+    }
+
+    private static bool ClampScroll(HostElement box)
+    {
+        var max = box.ScrollTopMax;
+        var followsEnd = box.Node.Style.OverflowAnchor == OverflowAnchor.Auto && box.AnchoredToEnd;
+        var wanted = followsEnd ? max : Math.Min(box.ScrollTop, max);
+        var moved = wanted != box.ScrollTop;
+        if (moved)
+        {
+            box.Node.ScrollTop = wanted;
+        }
+        box.AnchoredToEnd = box.ScrollTop >= max;
+        return moved;
     }
 
     /// <summary>
@@ -730,12 +823,22 @@ public sealed class TuiApp
             await FocusClosestFocusableAsync(target);
         }
 
-        if (mouse.Action == MouseAction.Pressed)
+        // A press raises click, then mousedown if click was not handled.
+        if (mouse.Action is MouseAction.Pressed)
         {
             await BubbleAsync(target, "onclick", args, () => args.Handled);
-            if (args.Handled) return;
+            if (!args.Handled) await BubbleAsync(target, "onmousedown", args, () => args.Handled);
         }
-        await BubbleAsync(target, "onmouse", args, () => args.Handled);
+        else if (mouse.Action is MouseAction.WheelUp or MouseAction.WheelDown)
+        {
+            await RouteWheelAsync(mouse, target);
+            return;
+        }
+        else
+        {
+            var name = mouse.Action is MouseAction.Released ? "onmouseup" : "onmousemove";
+            await BubbleAsync(target, name, args, () => args.Handled);
+        }
         if (args.Handled) return;
 
         var leftPress = mouse.Action == MouseAction.Pressed && mouse.Button == MouseButton.Left;
@@ -744,6 +847,17 @@ public sealed class TuiApp
             _renderer.Dirty = true;
         }
         Select(mouse, target);
+    }
+
+    private async Task RouteWheelAsync(MouseEvent mouse, HostElement target)
+    {
+        var wheel = new WheelEventArgs(mouse, target);
+        await BubbleAsync(target, "onwheel", wheel, () => wheel.Handled);
+        if (!wheel.Handled && ScrollableFrom(target) is { } scroller)
+        {
+            scroller.ScrollTop += wheel.DeltaY * Math.Max(1, _options.WheelRows);
+            _renderer!.Dirty = true;
+        }
     }
 
     private async Task FocusClosestFocusableAsync(HostElement target)

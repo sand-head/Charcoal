@@ -1,7 +1,7 @@
 @inject TuiApp Tui
 @implements IDisposable
 
-<div class="app" @onkeypress="OnKey">
+<div class="app" @onkeydown="OnKey">
     <div class="title">counters · Tab moves focus · + and − change · click focuses · q quits</div>
     <div class="row">
         @foreach (var counter in _counters)
@@ -28,7 +28,7 @@
         }), null, 1000, 1000);
     }
 
-    private void OnKey(KeyPressEventArgs e)
+    private void OnKey(KeyboardEventArgs e)
     {
         if (e.Key.Text != "q") return;
         Tui.Exit();

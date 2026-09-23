@@ -24,7 +24,7 @@ public class TuiAppTests
             b.OpenElement(0, "div");
             b.AddAttribute(1, "tabindex", 0);
             b.AddAttribute(2, "style", "height: 100%");
-            b.AddAttribute(3, "onkeypress", EventCallback.Factory.Create<KeyPressEventArgs>(this, e =>
+            b.AddAttribute(3, "onkeydown", EventCallback.Factory.Create<KeyboardEventArgs>(this, e =>
             {
                 Keys.Add(e.Key.ToString());
                 if (e.Key.Text == "+") { Count++; e.Handled = true; }

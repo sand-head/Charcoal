@@ -245,8 +245,46 @@ public sealed class HostElement : HostNode
 
     private (int Column, int Row)? _caret;
 
-    /// <summary>What a <c>canvas</c> element paints with.</summary>
+    /// <summary>What a <c>canvas</c> element paints with, set through its <c>@ref</c>.</summary>
     public Action<CellBuffer, Rect>? Painter { get; set; }
+
+    /// <summary>
+    /// Whether the user can scroll this box with the wheel and keys, as
+    /// <c>overflow: auto</c> or <c>scroll</c> allow. A <c>hidden</c> box can
+    /// still be scrolled through <see cref="ScrollTop"/>.
+    /// </summary>
+    public bool IsScrollContainer => Node.Style.Overflow == Overflow.Scroll;
+
+    /// <summary>The height of the content box in rows.</summary>
+    public int ClientHeight => Node.Layout.Deflate(Node.Style.Inset).Height;
+
+    /// <summary>The height of the scrolled content in rows.</summary>
+    public int ScrollHeight => Node.ContentSize.Height;
+
+    public int ScrollTopMax => Math.Max(0, ScrollHeight - ClientHeight);
+
+    /// <summary>
+    /// How many rows the content is scrolled up, clamped to the content.
+    /// Setting it does not raise <c>scroll</c>; the app raises that once a frame.
+    /// </summary>
+    public int ScrollTop
+    {
+        get => Node.ScrollTop;
+        set
+        {
+            Node.ScrollTop = Math.Clamp(value, 0, ScrollTopMax);
+            AnchoredToEnd = Node.ScrollTop >= ScrollTopMax;
+        }
+    }
+
+    /// <summary>
+    /// Whether the end was in view when this box was last scrolled or laid
+    /// out. It starts true so that a box that starts full shows its end.
+    /// </summary>
+    internal bool AnchoredToEnd { get; set; } = true;
+
+    /// <summary>The offset the last <c>scroll</c> event reported.</summary>
+    internal int ReportedScrollTop { get; set; }
 
     /// <summary>
     /// For a query container, the media environment with its content box as
@@ -265,7 +303,7 @@ public sealed class HostElement : HostNode
 
     public IReadOnlyDictionary<string, object?> Attributes => _attributes;
 
-    /// <summary>Blazor event handler ids by attribute name, such as <c>onkeypress</c>.</summary>
+    /// <summary>Blazor event handler ids by attribute name, such as <c>onkeydown</c>.</summary>
     public IReadOnlyDictionary<string, ulong> Handlers => _handlers;
 
     public ulong? HandlerFor(string eventName) => _handlers.TryGetValue(eventName, out var id) ? id : null;

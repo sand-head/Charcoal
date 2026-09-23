@@ -8,13 +8,13 @@ render tree is this library.
 ```razor
 @inject TuiApp App
 
-<div class="app" tabindex="0" @onkeypress="OnKey">
+<div class="app" tabindex="0" @onkeydown="OnKey">
     <div class="banner">Hello from sloptui</div>
     <p class="muted">Press q to quit.</p>
 </div>
 
 @code {
-    private void OnKey(KeyPressEventArgs e)
+    private void OnKey(KeyboardEventArgs e)
     {
         if (e.Key.Text != "q") return;
         App.Exit();
@@ -44,7 +44,8 @@ return new TuiApp().Run<App>();
   user-agent stylesheet that gives them their usual look: blocks stack,
   `strong` is bold, `em` italic, `mark` highlighted, `pre` keeps its
   whitespace, and paragraphs have a blank line around them. Bare text
-  under a block needs no component.
+  under a block needs no component. The library ships no components of its
+  own: scrolling, editing and drawing all happen behind standard elements.
 - **CSS, in cells.** `style="…"`, `class` and stylesheets go through one
   cascade: the user-agent sheet, then the app's sheets by specificity and
   order, then the inline style. Supported: `display: block | flex | grid |
@@ -94,7 +95,7 @@ return new TuiApp().Run<App>();
   `placeholder`, `type="password"`, `disabled`, `readonly`, `maxlength`,
   `size`, `rows`, `cols`, `wrap="off"` and `autofocus`. `@oninput` and
   `@onchange` carry the value, and `:disabled`, `:enabled` and
-  `:placeholder-shown` style the controls. Your `@onkeypress` sees each key
+  `:placeholder-shown` style the controls. Your `@onkeydown` sees each key
   first, so Enter or Up can submit or recall history.
 - **Blazor.** Parameters, `@key`, `@ref`, `EventCallback`, cascading values,
   `@inject`, `StateHasChanged` and `InvokeAsync` work as they do on the web.
@@ -105,18 +106,22 @@ return new TuiApp().Run<App>();
   `repeat(3, 1fr)`, explicit placement and spans, auto-placement, gaps and
   per-cell alignment. Layout is cached per node, so a frame only
   re-measures what changed.
-- **Scrolling.** `overflow: auto` on any element, with its `ScrollTop`
-  reachable through `@ref`, and a `ScrollBox` component that handles the
-  keyboard and the wheel, binds `ScrollTop`, and can stick to the bottom as
-  content grows.
+- **Scrolling.** `overflow: auto` makes any element a scroll container that
+  scrolls with the wheel, and with ↑ ↓ PageUp PageDown Home End while
+  focused. `ScrollTop`, `ScrollHeight` and `ClientHeight` are on the
+  element, reachable through `@ref`, and `@onscroll` fires when it moves.
+  `overflow-anchor: auto`, the default, keeps a box that is scrolled to its
+  end there as content arrives; `none` turns that off.
 - **Text that measures right.** Grapheme clusters and wcwidth, so CJK and
   emoji take two cells and combining marks take none. `white-space` decides
   wrapping and collapsing, and `text-overflow` decides the cut.
-- **Events.** `@onkeypress`, `@onclick`, `@onmouse`, `@onfocus`, `@onblur`
-  and `@onpaste`. Keys go to the focused element and bubble up.
-  `tabindex="0"` joins the Tab order, `tabindex="-1"` is focusable by click
-  only. Form controls place the terminal's cursor at their caret, and
-  `caret="col,row"` does the same for any other focused element.
+- **Events.** The DOM's names: `@onkeydown`, `@onclick`, `@onmousedown`,
+  `@onmouseup`, `@onmousemove`, `@onwheel`, `@onscroll`, `@onfocus`,
+  `@onblur`, `@onpaste`, `@oninput` and `@onchange`. Keys go to the focused
+  element and bubble up. `tabindex="0"` joins the Tab order,
+  `tabindex="-1"` is focusable by click only. Form controls place the
+  terminal's cursor at their caret, and `caret="col,row"` does the same for
+  any other focused element.
 - **Mouse selection.** Dragging selects text, and releasing copies it to the
   clipboard with OSC 52, which also works over ssh. Ctrl+C during a drag
   copies too. `user-select: none` keeps an element out of the selection and
@@ -185,7 +190,7 @@ with an `_Imports.razor` of `@using SlopTui.Components`, `@using SlopTui.Layout`
 
 ```
 .razor components → Blazor Renderer → host tree → cascade → block/flex/grid layout → Painter → Screen.Flush() → one write
-terminal input thread → AnsiKeyParser → InputPump → focus + bubbling → @onkeypress …
+terminal input thread → AnsiKeyParser → InputPump → focus + bubbling → @onkeydown …
 ```
 
 `TuiApp.Run` owns one thread: it is the Blazor dispatcher, the input router
@@ -195,9 +200,9 @@ the web. See [docs/design.md](docs/design.md) for details.
 ## Not yet supported
 
 iTerm2 inline images; `!important`; pseudo-elements; `margin: auto`
-centring; horizontal scrolling in the `ScrollBox` component, though the
-node's `ScrollLeft` works; list markers; and clicks on inline elements,
-which go to the block that holds them.
+centring; horizontal scrolling with the wheel and keys, though the node's
+`ScrollLeft` works; `keyup`, which terminals do not report; list markers;
+and clicks on inline elements, which go to the block that holds them.
 
 ## Building
 

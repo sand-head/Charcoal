@@ -1,6 +1,6 @@
 @inject TuiApp Tui
 
-<div class="app" tabindex="0" @onkeypress="OnKey">
+<div class="app" tabindex="0" @onkeydown="OnKey">
     <div class="title">pick a fruit · ↑ ↓ j k move · Enter or click picks · q quits</div>
     <div class="list">
         @for (var i = 0; i < Fruits.Length; i++)
@@ -17,7 +17,7 @@
     private int _selected;
     private string? _picked;
 
-    private void OnKey(KeyPressEventArgs e)
+    private void OnKey(KeyboardEventArgs e)
     {
         e.Handled = true;
         if (e.Key.Key == Key.Up || e.Key.Text == "k")

@@ -73,6 +73,7 @@ public static class StyleParser
         ["row-gap"] = (s, v) => s with { RowGap = Cells(v, "row-gap") },
         ["column-gap"] = (s, v) => s with { ColumnGap = Cells(v, "column-gap") },
         ["overflow"] = (s, v) => s with { Overflow = OverflowOf(v, "overflow") },
+        ["overflow-anchor"] = (s, v) => s with { OverflowAnchor = OverflowAnchorOf(v) },
         ["overflow-x"] = (s, v) => s with { Overflow = OverflowOf(v, "overflow-x") },
         ["overflow-y"] = (s, v) => s with { Overflow = OverflowOf(v, "overflow-y") },
         ["user-select"] = (s, v) => s with { UserSelect = UserSelectOf(v) },
@@ -490,6 +491,17 @@ public static class StyleParser
             "hidden" or "clip" => Overflow.Hidden,
             "scroll" or "auto" => Overflow.Scroll,
             _ => throw Bad(name, value),
+        };
+    }
+
+    private static OverflowAnchor OverflowAnchorOf(object? value)
+    {
+        if (value is OverflowAnchor a) return a;
+        return Text(value).ToLowerInvariant() switch
+        {
+            "auto" or "inherit" or "unset" or "initial" => OverflowAnchor.Auto,
+            "none" => OverflowAnchor.None,
+            _ => throw Bad("overflow-anchor", value),
         };
     }
 

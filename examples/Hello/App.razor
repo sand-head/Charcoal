@@ -1,6 +1,6 @@
 @inject TuiApp Tui
 
-<div class="app" tabindex="0" @onkeypress="OnKey">
+<div class="app" tabindex="0" @onkeydown="OnKey">
     <div class="banner">Hello from sloptui</div>
     <div class="muted">Press q to quit. Terminal is @Tui.Size.Width×@Tui.Size.Height cells.</div>
     <p>HTML inline tags work: <strong>strong</strong>, <em>em</em>, <u>u</u>, <s>s</s>, <mark>mark</mark><br />and a <span style="color: magenta">span</span> after a br.</p>
@@ -12,7 +12,7 @@
 </div>
 
 @code {
-    private void OnKey(KeyPressEventArgs e)
+    private void OnKey(KeyboardEventArgs e)
     {
         if (e.Key.Text != "q") return;
         Tui.Exit();

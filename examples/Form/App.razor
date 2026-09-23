@@ -1,6 +1,6 @@
 @inject TuiApp Tui
 
-<div class="app" @onkeypress="OnKey">
+<div class="app" @onkeydown="OnKey">
     <div class="title">sign up · Tab and Shift+Tab move between fields · Enter submits · Ctrl+C quits</div>
 
     <label>name</label>
@@ -27,7 +27,7 @@
 
     private int NoteLines => _notes.Length == 0 ? 0 : _notes.Split('\n').Length;
 
-    private void OnKey(KeyPressEventArgs e)
+    private void OnKey(KeyboardEventArgs e)
     {
         // Enter submits, except in the textarea, where it starts a new line.
         if (e.Key.Key == Key.Enter && Tui.Focus.Focused is { Control.Multiline: false })

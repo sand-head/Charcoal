@@ -62,13 +62,12 @@ public class RegressionTests
         protected override void BuildRenderTree(RenderTreeBuilder b)
         {
             b.OpenElement(0, "div"); b.AddAttribute(1, "tabindex", 0);
-            b.OpenComponent<ScrollBox>(2);
-            b.AddComponentParameter(3, "id", "scroller");
-            b.AddComponentParameter(4, nameof(ScrollBox.ChildContent), (RenderFragment)(inner =>
-            {
-                for (var i = 1; i <= 30; i++) { inner.OpenElement(0, "div"); inner.SetKey(i); inner.AddContent(1, $"line {i}"); inner.CloseElement(); }
-            }));
-            b.CloseComponent();
+            b.OpenElement(2, "div");
+            b.AddAttribute(3, "id", "scroller");
+            b.AddAttribute(4, "style", "overflow: auto");
+            b.AddAttribute(5, "tabindex", 0);
+            for (var i = 1; i <= 30; i++) { b.OpenElement(6, "div"); b.SetKey(i); b.AddContent(7, $"line {i}"); b.CloseElement(); }
+            b.CloseElement();
             b.CloseElement();
         }
 
@@ -110,16 +109,14 @@ public class RegressionTests
         {
             b.OpenElement(0, "div");
             b.OpenElement(2, "div"); b.AddContent(3, $"{Lines} lines"); b.CloseElement();
-            b.OpenComponent<ScrollBox>(4);
-            b.AddComponentParameter(5, nameof(ScrollBox.Autofocus), true);
-            b.AddComponentParameter(6, nameof(ScrollBox.StickToBottom), true);
-            b.AddComponentParameter(7, nameof(ScrollBox.ScrollTopChanged), EventCallback.Factory.Create<int>(this, _ => { }));
-            b.AddComponentParameter(9, "id", "grower");
-            b.AddComponentParameter(8, nameof(ScrollBox.ChildContent), (RenderFragment)(inner =>
-            {
-                for (var i = 1; i <= Lines; i++) { inner.OpenElement(0, "div"); inner.SetKey(i); inner.AddContent(1, $"line {i}"); inner.CloseElement(); }
-            }));
-            b.CloseComponent();
+            b.OpenElement(4, "div");
+            b.AddAttribute(5, "id", "grower");
+            b.AddAttribute(6, "style", "overflow: auto");
+            b.AddAttribute(7, "tabindex", 0);
+            b.AddAttribute(8, "autofocus", true);
+            b.AddAttribute(9, "onscroll", EventCallback.Factory.Create<ScrollEventArgs>(this, _ => { }));
+            for (var i = 1; i <= Lines; i++) { b.OpenElement(10, "div"); b.SetKey(i); b.AddContent(11, $"line {i}"); b.CloseElement(); }
+            b.CloseElement();
             b.CloseElement();
         }
 
