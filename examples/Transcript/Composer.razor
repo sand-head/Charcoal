@@ -2,7 +2,7 @@
     A one-line editor. The caret attribute places the terminal's cursor, and
     :focus in the scoped sheet colours the border while it has the keyboard.
 *@
-<div class="composer" tabindex="0" caret="@($"{2 + _caret},0")" @onkeypress="OnKey" @onpaste="OnPaste"><span class="prompt">❯ </span>@_text</div>
+<div class="composer" tabindex="0" caret="@($"{2 + _caret},0")" @onkeydown="OnKey" @onpaste="OnPaste"><span class="prompt">❯ </span>@_text</div>
 
 @code {
     [Parameter] public EventCallback<string> OnSubmit { get; set; }
@@ -10,7 +10,7 @@
     private string _text = "";
     private int _caret;
 
-    private async Task OnKey(KeyPressEventArgs e)
+    private async Task OnKey(KeyboardEventArgs e)
     {
         var key = e.Key;
         e.Handled = true;

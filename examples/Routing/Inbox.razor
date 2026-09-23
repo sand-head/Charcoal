@@ -1,0 +1,11 @@
+@page "/inbox"
+
+<h1>inbox</h1>
+<p>Three messages, each a link to a route with a parameter in it.</p>
+<ul>
+    @for (var i = 41; i <= 43; i++)
+    {
+        var id = i;
+        <li><a href="@($"/inbox/{id}")">message @id</a></li>
+    }
+</ul>

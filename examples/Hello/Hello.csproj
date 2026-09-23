@@ -6,11 +6,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="sloptui.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="charcoal.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../src/SlopTui/SlopTui.csproj" />
+    <ProjectReference Include="../../src/Charcoal/Charcoal.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,4 @@
-using SlopTui.Components;
+using Charcoal.Components;
 using Styled;
 
 // The components carry class names; this global stylesheet decides how they

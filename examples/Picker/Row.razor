@@ -1,5 +1,5 @@
 @* A row that only re-renders when its label or selection changes. *@
-<div class="@(Selected ? "row selected" : "row")" @onclick="OnClick" @onmouse="OnMouse">@(Selected ? "▸ " : "  ")@Label</div>
+<div class="@(Selected ? "row selected" : "row")" @onclick="OnClick" @onmousemove="OnMouseMove">@(Selected ? "▸ " : "  ")@Label</div>
 
 @code {
     [Parameter, EditorRequired] public string Label { get; set; } = "";
@@ -24,9 +24,8 @@
         return OnPick.InvokeAsync();
     }
 
-    private Task OnMouse(MouseEventArgs e)
+    private Task OnMouseMove(MouseEventArgs e)
     {
-        if (e.Mouse.Action != MouseAction.Moved) return Task.CompletedTask;
         e.Handled = true;
         return OnHover.InvokeAsync();
     }

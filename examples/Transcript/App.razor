@@ -6,7 +6,7 @@
     The transcript clips its overflow, so it is the column that shrinks; the
     rows around it keep their content's height.
 *@
-<div class="app" @onkeypress="OnKey">
+<div class="app" @onkeydown="OnKey">
     <div class="bar">
         <span class="name">transcript</span>
         <span class="muted">@_lines.Count lines · @(_streaming ? "streaming" : "paused") · F1 pauses · Enter sends · Ctrl+C quits</span>
@@ -93,7 +93,7 @@
         _wordsLeft = 0;
     }
 
-    private void OnKey(KeyPressEventArgs e)
+    private void OnKey(KeyboardEventArgs e)
     {
         if (e.Key.Key != Key.F1) return;
 

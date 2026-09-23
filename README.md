@@ -1,4 +1,4 @@
-# sloptui
+# Charcoal
 
 A component-style terminal UI library for .NET. Write `.razor` components
 with HTML elements and CSS, and get a cell-diffed terminal frame out.
@@ -8,13 +8,13 @@ render tree is this library.
 ```razor
 @inject TuiApp App
 
-<div class="app" tabindex="0" @onkeypress="OnKey">
-    <div class="banner">Hello from sloptui</div>
+<div class="app" tabindex="0" @onkeydown="OnKey">
+    <div class="banner">Hello from Charcoal</div>
     <p class="muted">Press q to quit.</p>
 </div>
 
 @code {
-    private void OnKey(KeyPressEventArgs e)
+    private void OnKey(KeyboardEventArgs e)
     {
         if (e.Key.Text != "q") return;
         App.Exit();
@@ -44,7 +44,8 @@ return new TuiApp().Run<App>();
   user-agent stylesheet that gives them their usual look: blocks stack,
   `strong` is bold, `em` italic, `mark` highlighted, `pre` keeps its
   whitespace, and paragraphs have a blank line around them. Bare text
-  under a block needs no component.
+  under a block needs no component. The library ships no components of its
+  own: scrolling, editing and drawing all happen behind standard elements.
 - **CSS, in cells.** `style="…"`, `class` and stylesheets go through one
   cascade: the user-agent sheet, then the app's sheets by specificity and
   order, then the inline style. Supported: `display: block | flex | grid |
@@ -94,7 +95,7 @@ return new TuiApp().Run<App>();
   `placeholder`, `type="password"`, `disabled`, `readonly`, `maxlength`,
   `size`, `rows`, `cols`, `wrap="off"` and `autofocus`. `@oninput` and
   `@onchange` carry the value, and `:disabled`, `:enabled` and
-  `:placeholder-shown` style the controls. Your `@onkeypress` sees each key
+  `:placeholder-shown` style the controls. Your `@onkeydown` sees each key
   first, so Enter or Up can submit or recall history.
 - **Blazor.** Parameters, `@key`, `@ref`, `EventCallback`, cascading values,
   `@inject`, `StateHasChanged` and `InvokeAsync` work as they do on the web.
@@ -105,18 +106,38 @@ return new TuiApp().Run<App>();
   `repeat(3, 1fr)`, explicit placement and spans, auto-placement, gaps and
   per-cell alignment. Layout is cached per node, so a frame only
   re-measures what changed.
-- **Scrolling.** `overflow: auto` on any element, with its `ScrollTop`
-  reachable through `@ref`, and a `ScrollBox` component that handles the
-  keyboard and the wheel, binds `ScrollTop`, and can stick to the bottom as
-  content grows.
+- **Scrolling.** `overflow: auto` makes any element a scroll container that
+  scrolls with the wheel, and with ↑ ↓ PageUp PageDown Home End while
+  focused. `ScrollTop`, `ScrollHeight` and `ClientHeight` are on the
+  element, reachable through `@ref`, and `@onscroll` fires when it moves.
+  Scroll anchoring (`overflow-anchor`) works as in CSS, so content growing
+  above what you are reading does not push it down. To keep a log pinned to
+  the bottom, use the same stylesheet as on the web:
+
+  ```css
+  .log > *       { overflow-anchor: none }
+  .log > .bottom { overflow-anchor: auto }
+  ```
+
+  Unlike on the web, the sentinel needs no height, since the smallest height
+  a terminal has is a whole row. Scrolling up moves the sentinel out of
+  view, and the log stops following.
 - **Text that measures right.** Grapheme clusters and wcwidth, so CJK and
   emoji take two cells and combining marks take none. `white-space` decides
   wrapping and collapsing, and `text-overflow` decides the cut.
-- **Events.** `@onkeypress`, `@onclick`, `@onmouse`, `@onfocus`, `@onblur`
-  and `@onpaste`. Keys go to the focused element and bubble up.
-  `tabindex="0"` joins the Tab order, `tabindex="-1"` is focusable by click
-  only. Form controls place the terminal's cursor at their caret, and
-  `caret="col,row"` does the same for any other focused element.
+- **Routing.** Blazor's own `@page`, `<Router>`, `<RouteView>`,
+  `NavigationManager` and `NavigateTo`. Without an address bar,
+  `TerminalNavigationManager` keeps the location in memory at `tui:///`.
+  `<a href>` is underlined, tabbable without a `tabindex`, and followed by
+  Enter or a click. Links outside the app, such as `https://` or `mailto:`,
+  are only reported through `TuiApp.LinkFollowed`.
+- **Events.** The DOM's names: `@onkeydown`, `@onclick`, `@onmousedown`,
+  `@onmouseup`, `@onmousemove`, `@onwheel`, `@onscroll`, `@onfocus`,
+  `@onblur`, `@onpaste`, `@oninput` and `@onchange`. Keys go to the focused
+  element and bubble up. `tabindex="0"` joins the Tab order,
+  `tabindex="-1"` is focusable by click only. Form controls place the
+  terminal's cursor at their caret, and `caret="col,row"` does the same for
+  any other focused element.
 - **Mouse selection.** Dragging selects text, and releasing copies it to the
   clipboard with OSC 52, which also works over ssh. Ctrl+C during a drag
   copies too. `user-select: none` keeps an element out of the selection and
@@ -160,7 +181,7 @@ Packages are published to GitHub Packages on each merge to `main` (pre-1.0):
 ```
 
 ```sh
-dotnet add package SlopTui
+dotnet add package Charcoal
 ```
 
 An app project uses the Razor SDK, so its `.razor` files compile and its
@@ -173,19 +194,19 @@ An app project uses the Razor SDK, so its `.razor` files compile and its
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="SlopTui" Version="0.1.*" />
+    <PackageReference Include="Charcoal" Version="0.1.*" />
   </ItemGroup>
 </Project>
 ```
 
-with an `_Imports.razor` of `@using SlopTui.Components`, `@using SlopTui.Layout`,
-`@using SlopTui.Rendering`, `@using SlopTui.Input`.
+with an `_Imports.razor` of `@using Charcoal.Components`, `@using Charcoal.Layout`,
+`@using Charcoal.Rendering`, `@using Charcoal.Input`.
 
 ## How it is put together
 
 ```
 .razor components → Blazor Renderer → host tree → cascade → block/flex/grid layout → Painter → Screen.Flush() → one write
-terminal input thread → AnsiKeyParser → InputPump → focus + bubbling → @onkeypress …
+terminal input thread → AnsiKeyParser → InputPump → focus + bubbling → @onkeydown …
 ```
 
 `TuiApp.Run` owns one thread: it is the Blazor dispatcher, the input router
@@ -195,9 +216,13 @@ the web. See [docs/design.md](docs/design.md) for details.
 ## Not yet supported
 
 iTerm2 inline images; `!important`; pseudo-elements; `margin: auto`
-centring; horizontal scrolling in the `ScrollBox` component, though the
-node's `ScrollLeft` works; list markers; and clicks on inline elements,
-which go to the block that holds them.
+centring; horizontal scrolling with the wheel and keys, though the node's
+`ScrollLeft` works; `keyup`, which terminals do not report; OSC 8
+hyperlinks for external links; scrolling to a `#fragment`, which still
+matches a route; list markers; and clicks on inline elements inside text,
+which go to the block that holds them. An inline element that a flex or
+grid container gives its own box, such as a link in a nav bar, is
+clickable.
 
 ## Building
 

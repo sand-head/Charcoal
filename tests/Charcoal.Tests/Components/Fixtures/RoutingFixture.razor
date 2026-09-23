@@ -1,0 +1,13 @@
+@* A Router and a bar of links. The bar is a flex container so each link gets a box a click can hit. *@
+<div class="bar" style="display: flex; gap: 2">
+    <a href="/" id="home">home</a>
+    <a href="/settings" id="settings">settings</a>
+    <a href="/thing/7" id="thing">thing</a>
+    <a href="https://example.com" id="outside">outside</a>
+    <a id="nolink">not a link</a>
+</div>
+
+<Router AppAssembly="@typeof(RoutingFixture).Assembly">
+    <Found Context="route"><RouteView RouteData="@route" /></Found>
+    <NotFound><div id="page">no route</div></NotFound>
+</Router>

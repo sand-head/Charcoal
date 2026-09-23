@@ -19,7 +19,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Test
-        run: dotnet test SlopTui.slnx -c Release --nologo
+        run: dotnet test Charcoal.slnx -c Release --nologo
 
   publish:
     needs: test
@@ -39,7 +39,7 @@ jobs:
 
       - name: Pack
         run: |
-          dotnet pack src/SlopTui/SlopTui.csproj -c Release \
+          dotnet pack src/Charcoal/Charcoal.csproj -c Release \
             -p:Version=0.1.${{ github.run_number }} -o artifacts --nologo
 
       - name: Push to GitHub Packages

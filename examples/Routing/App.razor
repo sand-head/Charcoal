@@ -1,0 +1,74 @@
+@* Blazor's own Router, matching against the location TerminalNavigationManager keeps in memory. *@
+@inject TuiApp Tui
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="app" tabindex="0" @onkeydown="OnKey">
+    <div class="bar">
+        <span class="brand">Charcoal</span>
+        <a href="/">home</a>
+        <a href="/inbox">inbox</a>
+        <a href="/inbox/42">message 42</a>
+        <a href="/settings">settings</a>
+        <a href="https://example.com">an outside link</a>
+    </div>
+    <hr />
+
+    <Router AppAssembly="@typeof(App).Assembly">
+        <Found Context="route">
+            <RouteView RouteData="@route" />
+        </Found>
+        <NotFound>
+            <h1>404</h1>
+            <p>Nothing is routed at <strong>@Nav.ToBaseRelativePath(Nav.Uri)</strong>.</p>
+        </NotFound>
+    </Router>
+
+    <hr />
+    <div class="muted">Tab moves between links, Enter follows one, a click follows one. Backspace goes back, q quits.</div>
+    <div class="muted">at @Nav.Uri@OutsideNote</div>
+</div>
+
+@code {
+    private string? _outside;
+
+    private string OutsideNote => _outside is null ? "" : $"  ·  left alone: {_outside}";
+
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+        // Outside links are only reported, so the app decides what to do with them.
+        Tui.LinkFollowed += OnLinkFollowed;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => StateHasChanged();
+
+    private void OnLinkFollowed(HostElement link)
+    {
+        if (link.Href is { } href && href.StartsWith("https://", StringComparison.Ordinal))
+        {
+            _outside = href;
+            StateHasChanged();
+        }
+    }
+
+    private void OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key.Text == "q")
+        {
+            Tui.Exit();
+            e.Handled = true;
+        }
+        else if (e.Key.Key == Key.Backspace)
+        {
+            Tui.Navigation.Back();
+            e.Handled = true;
+        }
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+        Tui.LinkFollowed -= OnLinkFollowed;
+    }
+}

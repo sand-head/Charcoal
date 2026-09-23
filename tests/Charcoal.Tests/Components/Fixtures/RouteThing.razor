@@ -1,0 +1,7 @@
+@page "/thing/{Id:int}"
+
+<div id="page">thing @Id</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+}

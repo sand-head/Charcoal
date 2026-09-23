@@ -1,6 +1,6 @@
-# sloptui design
+# Charcoal design
 
-sloptui renders Blazor components to a terminal. Components are `.razor`
+Charcoal renders Blazor components to a terminal. Components are `.razor`
 files reconciled by Blazor's own `Renderer`; the library styles them with
 CSS, lays them out on a grid of terminal cells, paints them into a cell
 buffer, and writes the difference from the previous frame to the terminal.
@@ -21,17 +21,18 @@ this library.
                                                │
                                                ▼
                                           Screen.Flush() ──► one write ──► ITerminal
- ITerminal input thread ──► AnsiKeyParser ──► InputEvent ──► focus/bubbling ──► @onkeypress …
+ ITerminal input thread ──► AnsiKeyParser ──► InputEvent ──► focus/bubbling ──► @onkeydown …
 ```
 
 | Namespace | Owns | Depends on |
 |---|---|---|
-| `SlopTui.Layout` | `Style` (the CSS subset), `Length`, `Edges`, geometry, `LayoutNode`, `FlexLayout`, `StyleParser` | `SlopTui.Rendering` for `Color` only |
-| `SlopTui.Rendering` | `Color`, `TextStyle`, `TextRun`, `Cell`, `CellBuffer`, `Screen` (diff → ANSI), `TextWidth`, `TextLayout` (wrapping), `Painter`, `ITextContent`, `ICustomPaint` | `SlopTui.Layout` for `Rect`/`Style` |
-| `SlopTui.Input` | `Key`, `KeyModifiers`, `KeyEvent`, `MouseEvent`, `PasteEvent`, `FocusEvent`, `AnsiKeyParser`, `InputPump` | nothing |
-| `SlopTui.Terminal` | `ITerminal`, `ConsoleTerminal` (Unix termios + Windows VT), `HeadlessTerminal`, `TerminalOptions` | `SlopTui.Layout` for `Size` |
-| `SlopTui.Styling` | `Stylesheet`, `Selector`, `StyleResolver`, `StyleContext`, `UserAgentStylesheet`: the cascade | `SlopTui.Layout`, `SlopTui.Components` (the host tree it matches) |
-| `SlopTui.Components` | `TerminalRenderer`, `TerminalDispatcher`, host tree, `MarkupParser`, `TuiApp`, `ScrollBox`, `Canvas`, focus, event args, `EventHandlers` | everything above |
+| `Charcoal.Layout` | `Style` (the CSS subset), `Length`, `Edges`, geometry, `LayoutNode`, `FlexLayout`, `StyleParser` | `Charcoal.Rendering` for `Color` only |
+| `Charcoal.Rendering` | `Color`, `TextStyle`, `TextRun`, `Cell`, `CellBuffer`, `Screen` (diff → ANSI), `TextWidth`, `TextLayout` (wrapping), `Painter`, `ITextContent`, `ICustomPaint` | `Charcoal.Layout` for `Rect`/`Style` |
+| `Charcoal.Input` | `Key`, `KeyModifiers`, `KeyEvent`, `MouseEvent`, `PasteEvent`, `FocusEvent`, `AnsiKeyParser`, `InputPump` | nothing |
+| `Charcoal.Terminal` | `ITerminal`, `ConsoleTerminal` (Unix termios + Windows VT), `HeadlessTerminal`, `TerminalOptions` | `Charcoal.Layout` for `Size` |
+| `Charcoal.Styling` | `Stylesheet`, `Selector`, `StyleResolver`, `StyleContext`, `UserAgentStylesheet`: the cascade | `Charcoal.Layout`, `Charcoal.Components` (the host tree it matches) |
+| `Charcoal.Components` | `TerminalRenderer`, `TerminalDispatcher`, host tree, `MarkupParser`, `TuiApp`, focus, event args, `EventHandlers` | everything above |
+| `Charcoal.Routing` | `TerminalNavigationManager`: the location, in memory | `Microsoft.AspNetCore.Components` |
 
 Rules between the layers:
 
@@ -184,10 +185,11 @@ terminal cursor. Enabled controls are focusable and tabbable without a
 `tabindex`, and `autofocus` takes focus when the element appears and nothing
 else has it. `:disabled`, `:enabled` and `:placeholder-shown` match them.
 
-**`canvas`** is a leaf painted by a delegate on the element (`Painter`). The
-`Canvas` component captures its element with `@ref` and sets the delegate
-after each render, so a component can draw a whole region, such as a chart,
-without a node per cell. It is sized and placed by style like any element.
+**`canvas`** is a leaf painted by a delegate on the element (`Painter`). A
+component captures the element with `@ref` and sets the delegate after its
+first render, as a page reaches a canvas's context, so it can draw a whole
+region, such as a chart, without a node per cell. It is sized and placed by
+style like any element.
 
 ## Styles
 
@@ -293,7 +295,7 @@ component, the Razor SDK stamps a `b-…` attribute on that component's
 elements, rewrites the sheet's selectors to match it (`::deep` included),
 and bundles the project's sheets into
 `obj/…/projectbundle/<Project>.bundle.scp.css`. A web page links the bundle;
-here `build/SlopTui.targets` embeds it in the assembly, and `TuiApp.Run`
+here `build/Charcoal.targets` embeds it in the assembly, and `TuiApp.Run`
 loads the bundle of every non-framework assembly the app uses, dependencies
 first, with `AddScopedStylesheets`. To the host tree the scope is an
 ordinary attribute, matched by an ordinary attribute selector.
@@ -359,9 +361,26 @@ pass, because a terminal works in integers and the property set is small:
 - **Scrolling.** A box with `overflow: scroll` or `hidden` shifts its
   children by the node's `ScrollTop` and `ScrollLeft`, which are set through
   `@ref` as in the DOM, and records its `ContentSize`. The engine does not
-  clamp the offsets, and changing one re-arranges without re-measuring. The
-  `ScrollBox` component clamps them and handles the arrow and page keys,
-  the wheel, `ScrollTop` and `StickToBottom`.
+  clamp the offsets, and changing one re-arranges without re-measuring.
+  `TuiApp` does the rest, as a browser would: between the layout and the
+  paint it applies scroll anchoring, clamps every container's offset to its
+  content, and raises one `scroll` event per change. After the handlers, the
+  wheel and the scroll keys (↑ ↓ PageUp PageDown Home End on the focused
+  container) move the offset. The element exposes `ScrollTop`,
+  `ScrollHeight`, `ClientHeight` and `ScrollTopMax`.
+- **Scroll anchoring** follows CSS Scroll Anchoring. After each layout,
+  `RecordAnchors` picks each container's anchor node: the first visible
+  element in tree order, preferring deeper and fully visible ones, skipping
+  elements with `overflow-anchor: none` and not searching nested scroll
+  containers. It records how far below the scrollport's top the anchor sits,
+  and the next layout corrects `ScrollTop` by however far it moved.
+  Anchoring only corrects for layout changes: `AnchorScrollTop` records the
+  offset the anchor was chosen at, and any scroll since then retires the
+  anchor, since otherwise the correction would undo the scroll. Pinning to
+  the bottom uses the web's stylesheet, with every child excluded and a
+  sentinel at the end. A box that opens on a backlog still has
+  to be scrolled to its end once, since anchoring keeps a position but does
+  not choose one.
 - A container's cross size is measured with its items at their final main
   sizes, so a row is as tall as its rewrapped text.
 - When content overflows, `justify-content: flex-end` keeps the end in
@@ -406,7 +425,7 @@ and paste bodies, decodes SGR mouse, CSI/SS3 keys, kitty keyboard sequences,
 and swallows terminal replies. `InputPump` feeds it from the thread's queue
 on the app loop and ticks it so a pending ESC expires.
 
-Routing on the app loop: a key goes to the focused element's `@onkeypress`,
+Routing on the app loop: a key goes to the focused element's `@onkeydown`,
 then bubbles to each ancestor's, then to the root's; the first handler that
 sets `Handled` stops it. Focus lives in `FocusManager`: an element with a
 `tabindex` can take focus, and one with a non-negative `tabindex` is in the
@@ -414,7 +433,7 @@ Tab cycle, in tree order. `Tab` and `Shift+Tab` move focus unless a handler
 took the key.
 
 A key no handler took goes to the focused form control before those
-defaults, as on a page, so a component's `@onkeypress` can turn Enter or Up
+defaults, as on a page, so a component's `@onkeydown` can turn Enter or Up
 into a submit or a history recall. An edit raises `@oninput` with the value.
 Unhandled pastes go in at the caret, and an unhandled left click places the
 caret. Enter in an `input` and losing focus raise `@onchange` when the value
@@ -426,10 +445,29 @@ Razor compiler only generates element bind code when
 `BindInputElementAttribute` is in the compilation, so the library references
 `Microsoft.AspNetCore.Components.Web` without importing its namespace.
 
-Mouse events hit-test the arranged tree and dispatch `@onclick`
-(and `@onmouse` for everything else) from the deepest box outward; a left
-click focuses the nearest focusable element. `@onfocus` / `@onblur` fire on
-change.
+Mouse events hit-test the arranged tree and dispatch from the deepest box
+outward: `@onclick` then `@onmousedown` for a press, and `@onmouseup`,
+`@onmousemove` and `@onwheel`. A left click focuses the nearest focusable
+element, and an unhandled wheel notch scrolls the nearest scroll container
+under the pointer. `@onfocus` and `@onblur` fire on change.
+
+**Routing** is Blazor's own. `Router`, `RouteView`, `@page` and
+`NavigationManager` live in `Microsoft.AspNetCore.Components` and need no
+browser, only a `NavigationManager` that knows the location.
+`TerminalNavigationManager` keeps it in memory, based at `tui:///` because
+route matching needs an absolute base, with a history stack for `Back()`.
+`INavigationInterception` does nothing, since the app already handles every
+click, and `IScrollToLocationHash` does not scroll yet.
+
+`<a href>` is a plain element with `Href` and `IsLink` on `HostElement`. The
+user-agent sheet underlines it, and it is focusable and tabbable without a
+`tabindex`, as on a page. Enter or a left click that no handler took calls
+`NavigateTo`, as `blazor.web.js` does with an intercepted click. Links with a
+scheme outside the app are raised on `TuiApp.LinkFollowed` and otherwise left
+alone. The scheme is parsed by hand, because on Unix
+`Uri.TryCreate(href, UriKind.Absolute, …)` reads `/settings` as
+`file:///settings`. `Router` injects `ILoggerFactory`, so the app registers
+its logger factory as a service.
 
 **Mouse selection** (`MouseSelection`, `TuiApp.Selection`) handles the mouse
 events no handler took. A left press anchors a selection unless
@@ -462,6 +500,14 @@ message lands on a readable screen.
 - Public API is `PascalCase`. Elements, attributes and properties use the
   HTML and CSS names; terminal-only features (dim, inverse, the caret) use
   the closest standard construct.
+- The library ships no components. Behaviour a browser supplies, such as
+  editing a field or scrolling a box, lives behind the element that HTML
+  names for it. A wrapping component would also take the element out of the
+  app's CSS scope.
+- Deviations from a browser are deliberate and documented where they live:
+  `body` has no margin, replaced elements and form controls are blocks, and
+  a scroll anchor may have no height, since the web's 1px sentinel would
+  cost a whole row here.
 - Public types carry a short summary. Comments explain why, not what.
 - Tests are xunit, one file per type under test, named for the behaviour
   (`A_flush_with_nothing_changed_writes_nothing`).

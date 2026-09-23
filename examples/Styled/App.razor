@@ -1,6 +1,6 @@
 @inject TuiApp Tui
 
-<div class="page" @onkeypress="OnKey">
+<div class="page" @onkeydown="OnKey">
     <div class="title">styled with a stylesheet</div>
     <div class="muted">Tab moves focus between the cards; the focused card's border and heading turn green through :focus rules. q quits.</div>
     <div class="cards">
@@ -21,7 +21,7 @@
 </div>
 
 @code {
-    private void OnKey(KeyPressEventArgs e)
+    private void OnKey(KeyboardEventArgs e)
     {
         if (e.Key.Text != "q") return;
         Tui.Exit();
