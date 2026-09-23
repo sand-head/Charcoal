@@ -30,6 +30,7 @@ public sealed class TerminalRenderer : Renderer
         _graphics = services.GetService(typeof(Graphics)) as Graphics;
         _styles = styles;
         Root = new HostElement("body", _styles, _graphics);
+        Root.RepaintRequested = () => Dirty = true;
     }
 
     public StyleContext? Styles => _styles;

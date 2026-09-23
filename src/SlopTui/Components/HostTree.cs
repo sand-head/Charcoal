@@ -272,8 +272,26 @@ public sealed class HostElement : HostNode
         get => Node.ScrollTop;
         set
         {
+            var previous = Node.ScrollTop;
             Node.ScrollTop = Math.Clamp(value, 0, ScrollTopMax);
             AnchoredToEnd = Node.ScrollTop >= ScrollTopMax;
+            // No component re-renders for a scroll, so it requests the frame itself.
+            if (Node.ScrollTop != previous) RequestRepaint();
+        }
+    }
+
+    /// <summary>Requests another frame. Only the root element has one, set by the renderer.</summary>
+    internal Action? RepaintRequested { get; set; }
+
+    private void RequestRepaint()
+    {
+        for (HostNode? node = this; node is not null; node = node.Parent)
+        {
+            if (node is HostElement { RepaintRequested: { } repaint })
+            {
+                repaint();
+                return;
+            }
         }
     }
 
