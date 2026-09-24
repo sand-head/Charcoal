@@ -290,10 +290,19 @@ Each directory under `examples/` is a runnable project.
 | `Form` | `input` and `textarea` with `@bind`, Tab between fields |
 | `Routing` | Four pages, a nav bar and a route parameter |
 | `Transcript` | A streaming transcript with a composer; `--bench` prints frame costs |
+| `Web` | All of the above in a browser, through `TuiApp.RunAsync` and the [slopterm](https://git.sand.town/sand_head/slopterm) emulator |
 
 ```sh
 dotnet run --project examples/Transcript -- --lines 5000
 dotnet run --project examples/Transcript -- --bench
+```
+
+`Web` is published to GitHub Pages on each merge to `main`. It is not in the
+solution, because building it needs the `wasm-tools` workload:
+
+```sh
+dotnet workload install wasm-tools
+dotnet run --project examples/Web
 ```
 
 ## How it works
@@ -305,7 +314,8 @@ terminal input → AnsiKeyParser → InputPump → focus and bubbling → @onkey
 
 `TuiApp.Run` owns one thread and is the Blazor dispatcher, the input router
 and the painter. Reach it from another thread with `InvokeAsync`, as on the
-web.
+web. Where the one thread must not block, as in a browser, `TuiApp.RunAsync`
+runs the same loop and awaits input instead.
 
 The design and the reasons behind it are in [docs/design.md](docs/design.md).
 

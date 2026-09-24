@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <!--
+    The examples in a browser: each one runs on the page's only thread through
+    TuiApp.RunAsync, and slopterm's emulator draws the frames. Needs the
+    wasm-tools workload, because SkiaSharp relinks the WebAssembly runtime.
+  -->
+  <PropertyGroup>
+    <RootNamespace>Web</RootNamespace>
+    <WasmBuildNative>true</WasmBuildNative>
+    <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+    <!-- This host's components are for the browser, so it has no terminal stylesheet to embed. -->
+    <CharcoalEmbedScopedCss>false</CharcoalEmbedScopedCss>
+    <!-- The examples are console apps; only their components are used here. -->
+    <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <RunAOTCompilation>true</RunAOTCompilation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.12" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.12" PrivateAssets="all" />
+    <PackageReference Include="SlopTerm.Blazor" Version="1.1.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Charcoal/Charcoal.csproj" />
+    <ProjectReference Include="../Counter/Counter.csproj" />
+    <ProjectReference Include="../Form/Form.csproj" />
+    <ProjectReference Include="../Hello/Hello.csproj" />
+    <ProjectReference Include="../Layouts/Layouts.csproj" />
+    <ProjectReference Include="../Picker/Picker.csproj" />
+    <ProjectReference Include="../Routing/Routing.csproj" />
+    <ProjectReference Include="../Styled/Styled.csproj" />
+    <ProjectReference Include="../Transcript/Transcript.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Hello loads its picture from a file, so the page writes it into the browser's in-memory file system. -->
+    <EmbeddedResource Include="../Hello/charcoal.png" LogicalName="charcoal.png" />
+  </ItemGroup>
+
+</Project>

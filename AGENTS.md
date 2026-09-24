@@ -48,7 +48,8 @@ src/Charcoal/
   Routing/     TerminalNavigationManager
   build/       Charcoal.targets (embeds scoped CSS bundles; ships in the package)
 tests/Charcoal.Tests/   xunit, one folder per namespace
-examples/               runnable apps: Hello, Layouts, Styled, Counter, Picker, Form, Routing, Transcript
+examples/               runnable apps: Hello, Layouts, Styled, Counter, Picker, Form, Routing, Transcript;
+                        Web runs them in a browser (needs wasm-tools, so it is not in the solution)
 docs/design.md          the design and the reasons behind it
 ```
 
@@ -141,6 +142,9 @@ careful person writes it by hand, and match the idiom of the file you are in.
 - **Restyles must not reset form fields.** `TextControlLayoutNode` applies the
   `value` attribute on first resolve and when `value` itself changes, never on
   a restyle, or typed text is overwritten.
+- **`RunAsync` needs one thread.** It is for hosts like a browser, where work
+  from a timer runs inline outside a step; every applied batch releases the
+  loop's signal so that work still paints. Elsewhere use `Run`.
 - **Stylesheet changes restyle inline when already on the loop thread**
   (`TuiApp.RestyleAll`) and are posted only from other threads, so an
   exception from a restyle surfaces to the code that changed the sheet.
