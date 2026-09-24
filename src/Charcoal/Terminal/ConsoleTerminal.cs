@@ -74,19 +74,7 @@ public sealed class ConsoleTerminal : ITerminal
 
             _size = QuerySize() ?? _size;
 
-            var enter = new StringBuilder();
-            if (options.AlternateScreen)
-            {
-                enter.Append(Ansi.AlternateScreenOn);
-                enter.Append(Ansi.ClearScreen);
-                enter.Append(Ansi.CursorHome);
-            }
-            if (options.HideCursor) enter.Append(Ansi.HideCursor);
-            if (options.BracketedPaste) enter.Append(Ansi.BracketedPasteOn);
-            if (options.FocusEvents) enter.Append(Ansi.FocusEventsOn);
-            if (options.Mouse) enter.Append(Ansi.MouseOn);
-            if (options.KittyKeyboard) enter.Append(Ansi.KittyKeyboardPush);
-            Write(enter.ToString());
+            Write(Ansi.Enter(options));
 
             AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
             AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
@@ -109,15 +97,7 @@ public sealed class ConsoleTerminal : ITerminal
             AppDomain.CurrentDomain.ProcessExit -= OnProcessExit;
             AppDomain.CurrentDomain.UnhandledException -= OnUnhandledException;
 
-            var leave = new StringBuilder();
-            if (_options.KittyKeyboard) leave.Append(Ansi.KittyKeyboardPop);
-            if (_options.Mouse) leave.Append(Ansi.MouseOff);
-            if (_options.FocusEvents) leave.Append(Ansi.FocusEventsOff);
-            if (_options.BracketedPaste) leave.Append(Ansi.BracketedPasteOff);
-            leave.Append(Ansi.ResetAttributes);
-            if (_options.HideCursor) leave.Append(Ansi.ShowCursor);
-            if (_options.AlternateScreen) leave.Append(Ansi.AlternateScreenOff);
-            Write(leave.ToString());
+            Write(Ansi.Leave(_options));
 
             if (OperatingSystem.IsWindows()) StopWindows();
             else StopUnix();
