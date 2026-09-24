@@ -51,7 +51,7 @@ public class ContainerQueryTests
         var terminal = new HeadlessTerminal(80, 10);
         var app = new TuiApp(terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
         app.AddStylesheet(Css);
-        var run = Task.Run(() => app.Run<Host>());
+        var run = AppThread.Start<Host>(app);
         WaitUntil(() => terminal.Writes.Count > 0, "the first frame", run);
         HostElement ById(string id) => app.Renderer.Root.Descendants().OfType<HostElement>().First(e => e.Id == id);
 

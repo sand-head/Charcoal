@@ -17,7 +17,7 @@ public class RoutingTests : IAsyncDisposable
     public RoutingTests()
     {
         _app = new TuiApp(_terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
-        _run = Task.Run(() => _app.Run<RoutingFixture>());
+        _run = AppThread.Start<RoutingFixture>(_app);
         Until(() => _terminal.Writes.Count > 0, "the first frame");
     }
 

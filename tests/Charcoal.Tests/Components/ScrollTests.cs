@@ -85,7 +85,7 @@ public class ScrollTests
             Host.Last = null;
             Terminal = new HeadlessTerminal(width, height);
             App = new TuiApp(Terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero, WheelRows = wheelRows });
-            _run = Task.Run(() => App.Run<Host>());
+            _run = AppThread.Start<Host>(App);
             WaitUntil(() => Terminal.Writes.Count > 0 && Host.Last is not null, "the first frame", _run);
             if (setup is not null) App.InvokeAsync(() => { setup(Host.Last!); Host.Last!.Refresh(); }).GetAwaiter().GetResult();
         }
@@ -117,7 +117,7 @@ public class ScrollTests
         // Content shrinks under the offset: the clamp pulls it back into range.
         await running.App.InvokeAsync(() => { running.Component.Lines = 12; running.Component.Refresh(); });
         running.Until(() => running.Box.ScrollTopMax == 2 && running.Box.ScrollTop == 2, "the offset to follow shrinking content");
-        Assert.True(running.Component.Scrolls > 0, "the scroll event never fired");
+        running.Until(() => running.Component.Scrolls > 0, "the scroll event");
     }
 
     [Fact]
@@ -220,7 +220,8 @@ public class ScrollTests
 
         running.Terminal.Inject("\e[F");    // End
         running.Until(() => running.Box.ScrollTop == 30, "end");
-        Assert.True(running.Component.Scrolls > scrolls, "the scroll event did not fire for the key");
+        // The event follows the frame that moved the offset, as in a browser.
+        running.Until(() => running.Component.Scrolls > scrolls, "the scroll event for the key");
 
         running.Terminal.Inject("\e[5~");   // PageUp: a viewport less one
         running.Until(() => running.Box.ScrollTop == 21, "a page up");

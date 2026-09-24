@@ -20,7 +20,7 @@ public class StyledComponentsTests
         var terminal = new HeadlessTerminal(40, 12);
         var app = new TuiApp(terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
         app.AddStylesheet(Css);
-        var run = Task.Run(() => app.Run<StyledFixture>());
+        var run = AppThread.Start<StyledFixture>(app);
         WaitUntil(() => terminal.Writes.Count > 0, "the first frame", run);
         return (app, terminal, run);
     }
@@ -129,7 +129,7 @@ public class StyledComponentsTests
         var terminal = new HeadlessTerminal(40, 12);
         var app = new TuiApp(terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
         app.AddStylesheet(CardCss);
-        var run = Task.Run(() => app.Run<CardsFixture>());
+        var run = AppThread.Start<CardsFixture>(app);
         WaitUntil(() => terminal.Writes.Count > 0, "the first frame", run);
 
         var card1 = ById(app, "card1");

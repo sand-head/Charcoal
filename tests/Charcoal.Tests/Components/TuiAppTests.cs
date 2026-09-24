@@ -52,7 +52,7 @@ public class TuiAppTests
     {
         var terminal = new HeadlessTerminal(40, 10);
         var app = new TuiApp(terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
-        var run = Task.Run(() => app.Run<Counter>());
+        var run = AppThread.Start<Counter>(app);
         WaitUntil(() => terminal.Writes.Count > 0, "the first frame", run);
         return (app, terminal, run);
     }

@@ -40,7 +40,7 @@ public class GraphicsDetectionTests
     {
         var terminal = new HeadlessTerminal(20, 5);
         var app = new TuiApp(terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
-        var run = Task.Run(() => app.Run<Host>());
+        var run = AppThread.Start<Host>(app);
         WaitUntil(() => terminal.Writes.Count >= 1, "the first frame", run);
 
         // The queries lead the first frame, in the same write.
@@ -87,7 +87,7 @@ public class GraphicsDetectionTests
     {
         var terminal = new HeadlessTerminal(20, 5);
         var app = new TuiApp(terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
-        var run = Task.Run(() => app.Run<Host>());
+        var run = AppThread.Start<Host>(app);
         WaitUntil(() => terminal.Writes.Count >= 1, "the first frame", run);
         terminal.Inject("\e[?1;2c");
         WaitUntil(() => app.Graphics.Detected, "detection to close", run);
@@ -122,7 +122,7 @@ public class GraphicsDetectionTests
     {
         var terminal = new HeadlessTerminal(20, 5);
         var app = new TuiApp(terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
-        var run = Task.Run(() => app.Run<Host>());
+        var run = AppThread.Start<Host>(app);
         WaitUntil(() => terminal.Writes.Count >= 1, "the first frame", run);
 
         var before = terminal.Writes.Count;
@@ -160,7 +160,7 @@ public class GraphicsDetectionTests
     {
         var terminal = new HeadlessTerminal(20, 5);
         var app = new TuiApp(terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
-        var run = Task.Run(() => app.Run<Host>());
+        var run = AppThread.Start<Host>(app);
         WaitUntil(() => terminal.Writes.Count >= 1, "the first frame", run);
         var before = terminal.Writes.Count;
         terminal.Inject("\e_Gi=31;OK\e\\" + "\e[?62;4;22c");
