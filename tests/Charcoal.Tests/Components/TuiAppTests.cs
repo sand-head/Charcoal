@@ -19,6 +19,12 @@ public class TuiAppTests
 
         protected override void OnInitialized() => Last = this;
 
+        public void Increment()
+        {
+            Count++;
+            StateHasChanged();
+        }
+
         protected override void BuildRenderTree(RenderTreeBuilder b)
         {
             b.OpenElement(0, "div");
@@ -137,6 +143,88 @@ public class TuiAppTests
         Assert.Contains("count 0", terminal.Writes[^1]);
         app.Exit();
         await run;
+    }
+
+    [Fact]
+    public void RunAsync_returns_while_waiting_for_input_and_handles_it_when_it_comes()
+    {
+        var terminal = new HeadlessTerminal(40, 10);
+        var app = new TuiApp(terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
+
+        var code = SingleThreadContext.Run(async () =>
+        {
+            var run = app.RunAsync<Counter>();
+            Assert.False(run.IsCompleted);
+            Assert.Contains("count 0", terminal.Output);
+
+            await app.Focus.FocusAsync(app.Renderer.Root.Descendants().OfType<HostElement>().First(e => e.Focusable));
+            terminal.Inject("+");
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (Counter.Last!.Count == 0 && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(5);
+            }
+            Assert.Equal(1, Counter.Last.Count);
+            app.Exit(4);
+            return await run;
+        });
+
+        Assert.Equal(4, code);
+        Assert.False(terminal.IsStarted);
+    }
+
+    [Fact]
+    public void Under_RunAsync_a_render_outside_the_loop_on_its_thread_still_paints()
+    {
+        var terminal = new HeadlessTerminal(40, 10);
+        var app = new TuiApp(terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
+
+        var painted = SingleThreadContext.Run(async () =>
+        {
+            var run = app.RunAsync<Counter>();
+            var framesBefore = terminal.Writes.Count;
+            // What a timer's callback does in a browser: InvokeAsync runs inline, since this is the loop's thread.
+            await app.InvokeAsync(Counter.Last!.Increment);
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (terminal.Writes.Count == framesBefore && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(5);
+            }
+            app.Exit();
+            await run;
+            return terminal.Writes.Count > framesBefore;
+        });
+
+        Assert.True(painted);
+    }
+
+    /// <summary>Runs async work on one thread, as a browser does.</summary>
+    private sealed class SingleThreadContext : SynchronizationContext
+    {
+        private readonly System.Collections.Concurrent.BlockingCollection<(SendOrPostCallback Callback, object? State)> _queue = [];
+
+        public override void Post(SendOrPostCallback d, object? state) => _queue.Add((d, state));
+
+        public static T Run<T>(Func<Task<T>> work)
+        {
+            var previous = Current;
+            var context = new SingleThreadContext();
+            SetSynchronizationContext(context);
+            try
+            {
+                var task = work();
+                task.ContinueWith(_ => context._queue.CompleteAdding(), TaskScheduler.Default);
+                foreach (var (callback, state) in context._queue.GetConsumingEnumerable())
+                {
+                    callback(state);
+                }
+                return task.GetAwaiter().GetResult();
+            }
+            finally
+            {
+                SetSynchronizationContext(previous);
+            }
+        }
     }
 
     private sealed class Thrower : ComponentBase

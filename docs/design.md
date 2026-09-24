@@ -495,6 +495,18 @@ is waiting for (a pending ESC, a timer, resize polling on Windows).
 including an unhandled exception, which is rethrown after the restore so the
 message lands on a readable screen.
 
+`TuiApp.RunAsync` is the same loop for a host whose one thread must not
+block, such as WebAssembly in a browser: each step is shared with `Run`, and
+the idle wait is awaited instead. The loop must resume on the thread that
+started it, so it needs a single-threaded synchronization context; anywhere
+else, use `Run`. On such a host a timer's `InvokeAsync` runs inline, outside
+any step, so it is not queued work that would wake the loop. Every applied
+render batch therefore releases the loop's signal too.
+
+`examples/Web` runs the other examples that way, drawn by the slopterm
+emulator in the same WebAssembly process. It needs the `wasm-tools`
+workload, so it is not in `Charcoal.slnx`.
+
 ## Conventions
 
 - Public API is `PascalCase`. Elements, attributes and properties use the
