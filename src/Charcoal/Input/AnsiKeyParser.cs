@@ -367,16 +367,22 @@ public sealed class AnsiKeyParser
             modifiers = DecodeModifiers(modifierValue);
         }
 
-        var typed = IsPrintable(key) ? KittyText(key, shifted, textField) : "";
+        var typed = IsPrintable(key) ? KittyText(keyNumber, shifted, modifiers, textField) : "";
         inputEvent = new KeyEvent(key, modifiers, typed);
         return length;
     }
 
-    /// <summary>The associated text if the terminal sent it, else the shifted key, else the key.</summary>
-    private static string KittyText(Key key, uint shifted, ReadOnlySpan<char> textField)
+    /// <summary>
+    /// The associated text if the terminal sent it, else the shifted key, else
+    /// the key's own codepoint, upper-cased when Shift is held.
+    /// </summary>
+    private static string KittyText(int code, uint shifted, KeyModifiers modifiers, ReadOnlySpan<char> textField)
     {
         if (TryAssociatedText(textField, out var associated)) return associated;
-        return TextOf(shifted > 0 ? shifted : (uint)key);
+        if (shifted > 0) return TextOf(shifted);
+
+        var text = TextOf((uint)code);
+        return modifiers.HasFlag(KeyModifiers.Shift) ? text.ToUpperInvariant() : text;
     }
 
     private static bool IsKittyModifierKey(int code) => code is >= 57441 and <= 57453;

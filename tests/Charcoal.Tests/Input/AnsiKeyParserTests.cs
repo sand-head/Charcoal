@@ -375,6 +375,7 @@ public class AnsiKeyParserTests
         var key = SingleKey(FeedWhole("\u001B[97u"));
         Assert.Equal((Key)'A', key.Key);
         Assert.Equal(KeyModifiers.None, key.Modifiers);
+        Assert.Equal("a", key.Text);
     }
 
     [Fact]
