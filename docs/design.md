@@ -375,8 +375,10 @@ pass, because a terminal works in integers and the property set is small:
   containers. It records how far below the scrollport's top the anchor sits,
   and the next layout corrects `ScrollTop` by however far it moved.
   Anchoring only corrects for layout changes: `AnchorScrollTop` records the
-  offset the anchor was chosen at, and any scroll since then retires the
-  anchor, since otherwise the correction would undo the scroll. Pinning to
+  offset the anchor was chosen at, and before the next layout
+  `ReanchorScrolledBoxes` chooses again for any box scrolled since, from the
+  last layout moved by the scroll, as a browser does. The scroll is kept, and
+  content that grows in the same frame is still corrected for. Pinning to
   the bottom uses the web's stylesheet, with every child excluded and a
   sentinel at the end. A box that opens on a backlog still has
   to be scrolled to its end once, since anchoring keeps a position but does
@@ -494,6 +496,18 @@ is waiting for (a pending ESC, a timer, resize polling on Windows).
 `TuiApp.Exit()` ends the loop; `Run` restores the terminal on every path
 including an unhandled exception, which is rethrown after the restore so the
 message lands on a readable screen.
+
+`TuiApp.RunAsync` is the same loop for a host whose one thread must not
+block, such as WebAssembly in a browser: each step is shared with `Run`, and
+the idle wait is awaited instead. The loop must resume on the thread that
+started it, so it needs a single-threaded synchronization context; anywhere
+else, use `Run`. On such a host a timer's `InvokeAsync` runs inline, outside
+any step, so it is not queued work that would wake the loop. Every applied
+render batch therefore releases the loop's signal too.
+
+`examples/Web` runs the other examples that way, drawn by the slopterm
+emulator in the same WebAssembly process. It needs the `wasm-tools`
+workload, so it is not in `Charcoal.slnx`.
 
 ## Conventions
 

@@ -33,7 +33,7 @@ public class ScopedCssTests
     {
         var terminal = new HeadlessTerminal(40, 10);
         var app = new TuiApp(terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
-        var run = Task.Run(() => app.Run<ScopedFixture>());
+        var run = AppThread.Start<ScopedFixture>(app);
         WaitUntil(() => terminal.Writes.Count > 0, "the first frame", run);
 
         HostElement ById(string id) => app.Renderer.Root.Descendants().OfType<HostElement>().First(e => e.Id == id);

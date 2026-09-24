@@ -75,6 +75,7 @@ public sealed class TuiApp
     private string _startup = "";
     private bool _sixelRepaint;
     private TerminalNavigationManager? _navigation;
+    private long? _lastFrame;
 
     public TuiApp(ITerminal? terminal = null, TuiAppOptions? options = null, ILoggerFactory? loggerFactory = null)
     {
@@ -297,6 +298,56 @@ public sealed class TuiApp
     /// <inheritdoc cref="Run{TRoot}"/>
     public int Run(Type rootComponent, IReadOnlyDictionary<string, object?>? parameters = null)
     {
+        var provider = Prepare();
+        try
+        {
+            Launch(rootComponent, parameters);
+            while (Step())
+            {
+                _dispatcher.Signal.Wait(NextWait());
+            }
+        }
+        finally
+        {
+            TearDown(provider);
+        }
+        return ExitCode();
+    }
+
+    /// <summary>
+    /// Runs the root component until <see cref="Exit"/>, awaiting input
+    /// instead of blocking.
+    /// </summary>
+    /// <remarks>
+    /// For a host with one thread that must not block, such as WebAssembly in
+    /// a browser. The loop must stay on the thread that started it, so
+    /// anywhere else use <see cref="Run{TRoot}"/>.
+    /// </remarks>
+    public Task<int> RunAsync<TRoot>(IReadOnlyDictionary<string, object?>? parameters = null) where TRoot : IComponent =>
+        RunAsync(typeof(TRoot), parameters);
+
+    /// <inheritdoc cref="RunAsync{TRoot}"/>
+    public async Task<int> RunAsync(Type rootComponent, IReadOnlyDictionary<string, object?>? parameters = null)
+    {
+        var provider = Prepare();
+        try
+        {
+            Launch(rootComponent, parameters);
+            while (Step())
+            {
+                await _dispatcher.Signal.WaitAsync(NextWait());
+            }
+        }
+        finally
+        {
+            TearDown(provider);
+        }
+        return ExitCode();
+    }
+
+    /// <summary>Builds the services, the renderer and focus, and subscribes to the terminal.</summary>
+    private ServiceProvider Prepare()
+    {
         _dispatcher.BindToCurrentThread();
         if (ScopedStylesheets) LoadScopedStylesheets();
         var provider = Services.BuildServiceProvider();
@@ -307,6 +358,9 @@ public sealed class TuiApp
         _focus = new FocusManager(_renderer.Root, NotifyFocusAsync, work => _dispatcher.Post(work), _styles);
         _focus.Changed += (previous, current) => _renderer.FocusChanged(previous, current);
         _renderer.AutofocusRequested += OnAutofocus;
+        // A render on the loop thread outside a step, such as a timer's on a
+        // single-threaded host, is not queued work, so it wakes the loop itself.
+        _renderer.BatchApplied += () => _dispatcher.Signal.Release();
         _styles.Sheets.Changed += OnStylesheetsChanged;
         _size = _terminal.Size;
         _screen = new Screen(_size.Width, _size.Height) { SynchronizedOutput = SynchronizedOutput };
@@ -314,48 +368,53 @@ public sealed class TuiApp
         _terminal.InputReceived += _pump.Enqueue;
         _terminal.Resized += OnResized;
         _pump.ChunkQueued += () => _dispatcher.Signal.Release();
+        return provider;
+    }
 
-        try
+    /// <summary>Starts the terminal, queues the startup queries and renders the root component.</summary>
+    private void Launch(Type rootComponent, IReadOnlyDictionary<string, object?>? parameters)
+    {
+        _terminal.Start(_options.Terminal);
+        // Sent with the first frame. DA1 comes last because every terminal
+        // answers it, so its reply means the others will not come.
+        if (DetectGraphics && _terminal.IsInteractive)
         {
-            _terminal.Start(_options.Terminal);
-            // Sent with the first frame. DA1 comes last because every terminal
-            // answers it, so its reply means the others will not come.
-            if (DetectGraphics && _terminal.IsInteractive)
-            {
-                _startup = KittyGraphics.Query + Ansi.QueryCellPixels + Ansi.QueryDeviceAttributes;
-            }
-            else
-            {
-                Graphics.Detected = true;
-            }
-            if (DetectColorScheme && _terminal.IsInteractive) _startup = Ansi.QueryBackground + _startup;
-            _styles.Media = _styles.Media with
-            {
-                Width = _size.Width,
-                Height = _size.Height,
-                ColorBits = ColorBits(),
-                Pointer = _options.Terminal.Mouse,
-            };
-            _renderer.SetViewport(_size);
-            var parameterView = parameters is null
-                ? ParameterView.Empty
-                : ParameterView.FromDictionary(new Dictionary<string, object?>(parameters));
-            var render = _renderer.AddRootComponentAsync(rootComponent, parameterView);
-            if (render.IsFaulted) throw render.Exception!.GetBaseException();
-            Loop();
+            _startup = KittyGraphics.Query + Ansi.QueryCellPixels + Ansi.QueryDeviceAttributes;
         }
-        finally
+        else
         {
-            _styles.Sheets.Changed -= OnStylesheetsChanged;
-            var release = Graphics.ReleaseAll();
-            if (release.Length > 0) _terminal.Write(release);
-            _terminal.Stop();
-            _terminal.InputReceived -= _pump.Enqueue;
-            _terminal.Resized -= OnResized;
-            _renderer.Dispose();
-            provider.Dispose();
+            Graphics.Detected = true;
         }
+        if (DetectColorScheme && _terminal.IsInteractive) _startup = Ansi.QueryBackground + _startup;
+        _styles.Media = _styles.Media with
+        {
+            Width = _size.Width,
+            Height = _size.Height,
+            ColorBits = ColorBits(),
+            Pointer = _options.Terminal.Mouse,
+        };
+        _renderer!.SetViewport(_size);
+        var parameterView = parameters is null
+            ? ParameterView.Empty
+            : ParameterView.FromDictionary(new Dictionary<string, object?>(parameters));
+        var render = _renderer.AddRootComponentAsync(rootComponent, parameterView);
+        if (render.IsFaulted) throw render.Exception!.GetBaseException();
+    }
 
+    private void TearDown(ServiceProvider provider)
+    {
+        _styles.Sheets.Changed -= OnStylesheetsChanged;
+        var release = Graphics.ReleaseAll();
+        if (release.Length > 0) _terminal.Write(release);
+        _terminal.Stop();
+        _terminal.InputReceived -= _pump.Enqueue;
+        _terminal.Resized -= OnResized;
+        _renderer?.Dispose();
+        provider.Dispose();
+    }
+
+    private int ExitCode()
+    {
         if (_failure is not null) throw new TuiAppException(_failure);
         return _exitCode;
     }
@@ -426,43 +485,43 @@ public sealed class TuiApp
         return _renderer!.RaiseAsync(element, "oninput", new ChangeEventArgs { Value = value }, value);
     }
 
-    private void Loop()
+    /// <summary>
+    /// One turn of the loop: queued work, input, a resize and a frame when one
+    /// is due. Returns false once the app should stop.
+    /// </summary>
+    private bool Step()
     {
-        long? lastFrame = null;
-        while (!_exitRequested)
+        if (_exitRequested) return false;
+        _dispatcher.RunPending(OnException);
+        RouteInput();
+        _dispatcher.RunPending(OnException);
+        if (_exitRequested) return false;
+
+        if (_resized)
         {
-            _dispatcher.RunPending(OnException);
-            RouteInput();
-            _dispatcher.RunPending(OnException);
-            if (_exitRequested) break;
-
-            if (_resized)
-            {
-                _resized = false;
-                SetMedia(_styles.Media with { Width = _size.Width, Height = _size.Height });
-                _renderer!.SetViewport(_size);
-                _screen!.Resize(_size.Width, _size.Height);
-                _sixelRepaint = true;
-                _renderer.Dirty = true;
-            }
-
-            var due = lastFrame is not { } last || Stopwatch.GetElapsedTime(last) >= _options.FrameInterval;
-            if (_renderer!.Dirty && due)
-            {
-                PaintFrame();
-                lastFrame = Stopwatch.GetTimestamp();
-            }
-
-            _dispatcher.Signal.Wait(NextWait(lastFrame));
+            _resized = false;
+            SetMedia(_styles.Media with { Width = _size.Width, Height = _size.Height });
+            _renderer!.SetViewport(_size);
+            _screen!.Resize(_size.Width, _size.Height);
+            _sixelRepaint = true;
+            _renderer.Dirty = true;
         }
+
+        var due = _lastFrame is not { } last || Stopwatch.GetElapsedTime(last) >= _options.FrameInterval;
+        if (_renderer!.Dirty && due)
+        {
+            PaintFrame();
+            _lastFrame = Stopwatch.GetTimestamp();
+        }
+        return true;
     }
 
-    private TimeSpan NextWait(long? lastFrame)
+    private TimeSpan NextWait()
     {
         var wait = Timeout.InfiniteTimeSpan;
         if (_renderer!.Dirty)
         {
-            var until = lastFrame is { } last ? _options.FrameInterval - Stopwatch.GetElapsedTime(last) : TimeSpan.Zero;
+            var until = _lastFrame is { } last ? _options.FrameInterval - Stopwatch.GetElapsedTime(last) : TimeSpan.Zero;
             wait = until <= TimeSpan.Zero ? TimeSpan.Zero : until;
         }
         if (_pump.PendingEscapeDeadlineTicks is { } deadline)
@@ -483,6 +542,7 @@ public sealed class TuiApp
             _ = _focus.FocusAsync(null);
         }
         var layoutStart = Stopwatch.GetTimestamp();
+        ReanchorScrolledBoxes();
         FlexLayout.Layout(_renderer.Root.Node, _size);
         if (_styles.UsesContainer)
         {
@@ -792,17 +852,42 @@ public sealed class TuiApp
     {
         foreach (var box in _renderer!.Root.Descendants().OfType<HostElement>().Where(e => e.IsScrollContainer))
         {
-            if (box.Node.Style.OverflowAnchor == OverflowAnchor.None)
-            {
-                box.AnchorNode = null;
-                continue;
-            }
-
-            var scrollport = box.Scrollport;
-            box.AnchorNode = SelectAnchor(box, scrollport);
-            box.AnchorOffset = box.AnchorNode is { } anchor ? anchor.Node.Layout.Y - scrollport.Y : 0;
-            box.AnchorScrollTop = box.ScrollTop;
+            RecordAnchor(box, 0);
         }
+    }
+
+    /// <summary>
+    /// Chooses the anchor again for each box scrolled since its anchor was
+    /// recorded, from the last layout moved by the scroll, as a browser does
+    /// before the next layout. Content that grows in the same frame as the
+    /// scroll is then corrected for, and the scroll itself is kept.
+    /// </summary>
+    private void ReanchorScrolledBoxes()
+    {
+        foreach (var box in _renderer!.Root.Descendants().OfType<HostElement>().Where(e => e.IsScrollContainer))
+        {
+            var scrolled = box.ScrollTop - box.AnchorScrollTop;
+            if (scrolled != 0) RecordAnchor(box, scrolled);
+        }
+    }
+
+    /// <summary>
+    /// Records a box's anchor node and how far below the scrollport's top it
+    /// sits, with the content moved up by <paramref name="scrolled"/> rows
+    /// the last layout has not applied yet.
+    /// </summary>
+    private static void RecordAnchor(HostElement box, int scrolled)
+    {
+        if (box.Node.Style.OverflowAnchor == OverflowAnchor.None)
+        {
+            box.AnchorNode = null;
+            return;
+        }
+
+        var scrollport = box.Scrollport.Offset(0, scrolled);
+        box.AnchorNode = SelectAnchor(box, scrollport);
+        box.AnchorOffset = box.AnchorNode is { } anchor ? anchor.Node.Layout.Y - scrollport.Y : 0;
+        box.AnchorScrollTop = box.ScrollTop;
     }
 
     /// <summary>

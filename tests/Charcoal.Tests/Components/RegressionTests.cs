@@ -40,7 +40,7 @@ public class RegressionTests
             .card { border: solid; border-radius: 1; padding: 0 1; width: 26; color: white; }
             .card .heading { font-weight: bold; }
             """);
-        var run = Task.Run(() => app.Run<Cards>());
+        var run = AppThread.Start<Cards>(app);
         var deadline = DateTime.UtcNow.AddSeconds(5);
         while (terminal.Writes.Count == 0 && DateTime.UtcNow < deadline) Thread.Sleep(5);
         Thread.Sleep(100);
@@ -89,7 +89,7 @@ public class RegressionTests
     {
         var terminal = new HeadlessTerminal(40, 10);
         var app = new TuiApp(terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
-        var run = Task.Run(() => app.Run<FocusesOnAfterRender>());
+        var run = AppThread.Start<FocusesOnAfterRender>(app);
         var deadline = DateTime.UtcNow.AddSeconds(5);
         while (terminal.Writes.Count < 2 && DateTime.UtcNow < deadline) Thread.Sleep(5);
         Thread.Sleep(200);
@@ -129,7 +129,7 @@ public class RegressionTests
         var terminal = new HeadlessTerminal(40, 10);
         var app = new TuiApp(terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
         var log = new List<string>();
-        var run = Task.Run(() => app.Run<GrowingList>());
+        var run = AppThread.Start<GrowingList>(app);
         var deadline = DateTime.UtcNow.AddSeconds(5);
         while ((terminal.Writes.Count < 1 || app.Focus.Focused is null) && DateTime.UtcNow < deadline) Thread.Sleep(5);
         app.Focus.Changed += (f, t) => log.Add($"{f?.Id ?? "none"} → {t?.Id ?? "none"}");

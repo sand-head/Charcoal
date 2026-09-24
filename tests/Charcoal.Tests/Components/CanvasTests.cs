@@ -30,7 +30,7 @@ public class CanvasTests
     {
         var terminal = new HeadlessTerminal(20, 4);
         var app = new TuiApp(terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
-        var run = Task.Run(() => app.Run<Host>());
+        var run = AppThread.Start<Host>(app);
         var deadline = DateTime.UtcNow.AddSeconds(5);
         while (Host.Last is null && DateTime.UtcNow < deadline) { if (run.IsFaulted) throw run.Exception!.GetBaseException(); Thread.Sleep(5); }
 

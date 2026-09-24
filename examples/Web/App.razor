@@ -1,0 +1,121 @@
+@using TuiApp = Charcoal.Components.TuiApp
+@using SlopTerm.Core.Screen
+@implements IDisposable
+
+<div class="page">
+    <header>
+        <h1>Charcoal</h1>
+        <p>Razor components rendered to a terminal. Here the terminal is <a href="https://git.sand.town/sand_head/slopterm">slopterm</a>,
+           and both run as WebAssembly in this tab: the examples below are the same projects as in
+           <a href="https://github.com/sand-head/charcoal/tree/main/examples">examples/</a>, unchanged.</p>
+    </header>
+
+    @* Charcoal's @onclick for terminal elements is in scope too, so the browser's is bound by hand. *@
+    <nav aria-label="Examples">
+        @foreach (var sample in Samples.All)
+        {
+            <button class="@(sample == _selected ? "current" : null)" aria-pressed="@(sample == _selected)" onclick="@Select(sample)">@sample.Name</button>
+        }
+    </nav>
+    <p class="summary">@_selected.Summary @_status</p>
+
+    <div class="surface">
+        <SlopTermView @ref="_view" Terminal="_emulator" OnData="OnData" OnResize="OnResize" AriaLabel="Charcoal example" />
+    </div>
+</div>
+
+@code {
+    /// <summary>The sixteen colours named colours map to: black, red … white, then the bright ones.</summary>
+    private static readonly CellColor[] AnsiColors =
+    [
+        CellColor.Rgb(0x1E, 0x1E, 0x24), CellColor.Rgb(0xE0, 0x55, 0x61), CellColor.Rgb(0x57, 0xC4, 0x8A), CellColor.Rgb(0xE0, 0xA4, 0x58),
+        CellColor.Rgb(0x5B, 0x8D, 0xEF), CellColor.Rgb(0xC6, 0x78, 0xDD), CellColor.Rgb(0x56, 0xB6, 0xC2), CellColor.Rgb(0xD6, 0xD3, 0xCD),
+        CellColor.Rgb(0x6B, 0x6A, 0x72), CellColor.Rgb(0xFF, 0x7A, 0x85), CellColor.Rgb(0x7E, 0xE2, 0xA8), CellColor.Rgb(0xF2, 0xC4, 0x6D),
+        CellColor.Rgb(0x82, 0xA9, 0xFF), CellColor.Rgb(0xE1, 0x9B, 0xF0), CellColor.Rgb(0x7F, 0xD3, 0xDD), CellColor.Rgb(0xF4, 0xF2, 0xEE),
+    ];
+
+    private readonly TerminalEmulator _emulator = new(100, 30);
+    private EmulatorTerminal _terminal = default!;
+    private SlopTermView? _view;
+    private Sample _selected = Samples.All[0];
+    private TuiApp? _app;
+    private string _status = "";
+    private bool _disposed;
+
+    protected override void OnInitialized()
+    {
+        _emulator.Palette.SetTheme(
+            foreground: CellColor.Rgb(0xD6, 0xD3, 0xCD),
+            background: CellColor.Rgb(0x16, 0x16, 0x1A),
+            cursor: CellColor.Rgb(0x57, 0xC4, 0x8A));
+        for (var i = 0; i < AnsiColors.Length; i++)
+        {
+            _emulator.Palette.SetThemeColor(i, AnsiColors[i]);
+        }
+        _terminal = new EmulatorTerminal(_emulator);
+        WritePicture();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        if (_view is not null) await _view.FocusAsync();
+        await RunAsync();
+    }
+
+    /// <summary>Runs the selected example, and the next one whenever it ends.</summary>
+    private async Task RunAsync()
+    {
+        while (!_disposed)
+        {
+            var sample = _selected;
+            _emulator.Reset();
+            var app = new TuiApp(_terminal);
+            sample.Configure?.Invoke(app);
+            _app = app;
+            try
+            {
+                await app.RunAsync(sample.Root);
+                _status = "";
+            }
+            catch (Exception exception)
+            {
+                _status = $"It stopped: {exception.GetBaseException().Message}";
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+            _app = null;
+        }
+    }
+
+    private EventCallback<MouseEventArgs> Select(Sample sample) =>
+        EventCallback.Factory.Create<MouseEventArgs>(this, () => SelectAsync(sample));
+
+    private async Task SelectAsync(Sample sample)
+    {
+        _selected = sample;
+        _status = "";
+        _app?.Exit();
+        if (_view is not null) await _view.FocusAsync();
+    }
+
+    private void OnData(byte[] data) => _terminal.Receive(data);
+
+    private void OnResize((int Cols, int Rows) size) => _terminal.NotifyResized();
+
+    /// <summary>Hello's img reads charcoal.png from the working directory, which here is in memory.</summary>
+    private static void WritePicture()
+    {
+        using var picture = typeof(App).Assembly.GetManifestResourceStream("charcoal.png");
+        if (picture is null) return;
+        using var file = File.Create("charcoal.png");
+        picture.CopyTo(file);
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _app?.Exit();
+        _terminal.Dispose();
+    }
+}

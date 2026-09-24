@@ -46,4 +46,21 @@ public class AnsiTests
         Assert.Equal("\e[?1004h", Ansi.FocusEventsOn);
         Assert.Equal("\e[c", Ansi.QueryDeviceAttributes);
     }
+
+    [Fact]
+    public void Enter_switches_on_only_the_asked_for_modes_and_leave_undoes_them()
+    {
+        var options = new TerminalOptions { Mouse = false, KittyKeyboard = false };
+
+        var enter = Ansi.Enter(options);
+        var leave = Ansi.Leave(options);
+
+        Assert.StartsWith(Ansi.AlternateScreenOn, enter, StringComparison.Ordinal);
+        Assert.Contains(Ansi.BracketedPasteOn, enter);
+        Assert.DoesNotContain("1006", enter);
+        Assert.DoesNotContain(Ansi.KittyKeyboardPush, enter);
+        Assert.EndsWith(Ansi.AlternateScreenOff, leave, StringComparison.Ordinal);
+        Assert.Contains(Ansi.ShowCursor, leave);
+        Assert.DoesNotContain("1006", leave);
+    }
 }

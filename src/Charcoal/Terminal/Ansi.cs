@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Charcoal.Terminal;
 
 /// <summary>The escape sequences shared by the terminal runtime and the renderer.</summary>
@@ -75,4 +77,36 @@ public static class Ansi
     }
 
     public const string EraseToEndOfLine = "\e[K";
+
+    /// <summary>The sequence that switches on what <paramref name="options"/> asks for.</summary>
+    public static string Enter(TerminalOptions options)
+    {
+        var enter = new StringBuilder();
+        if (options.AlternateScreen)
+        {
+            enter.Append(AlternateScreenOn);
+            enter.Append(ClearScreen);
+            enter.Append(CursorHome);
+        }
+        if (options.HideCursor) enter.Append(HideCursor);
+        if (options.BracketedPaste) enter.Append(BracketedPasteOn);
+        if (options.FocusEvents) enter.Append(FocusEventsOn);
+        if (options.Mouse) enter.Append(MouseOn);
+        if (options.KittyKeyboard) enter.Append(KittyKeyboardPush);
+        return enter.ToString();
+    }
+
+    /// <summary>Undoes <see cref="Enter"/>, in reverse order.</summary>
+    public static string Leave(TerminalOptions options)
+    {
+        var leave = new StringBuilder();
+        if (options.KittyKeyboard) leave.Append(KittyKeyboardPop);
+        if (options.Mouse) leave.Append(MouseOff);
+        if (options.FocusEvents) leave.Append(FocusEventsOff);
+        if (options.BracketedPaste) leave.Append(BracketedPasteOff);
+        leave.Append(ResetAttributes);
+        if (options.HideCursor) leave.Append(ShowCursor);
+        if (options.AlternateScreen) leave.Append(AlternateScreenOff);
+        return leave.ToString();
+    }
 }

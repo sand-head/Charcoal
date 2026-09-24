@@ -15,7 +15,7 @@ public class InputTests
         public Running()
         {
             App = new TuiApp(Terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
-            Run = Task.Run(() => App.Run<FormFixture>());
+            Run = AppThread.Start<FormFixture>(App);
             Until(() => Terminal.Writes.Count > 0, "the first frame");
         }
 

@@ -101,7 +101,7 @@ public class MouseSelectionTests
         var app = new TuiApp(terminal, new TuiAppOptions { FrameInterval = TimeSpan.Zero });
         string? copied = null;
         app.Selection.Copied += text => copied = text;
-        var run = Task.Run(() => app.Run<Host>());
+        var run = AppThread.Start<Host>(app);
         WaitUntil(() => terminal.Writes.Count > 0, "the first frame", run);
 
         // Press on "hello" (row 2, column 2 → SGR 1-based 2;2), drag to after "world" (column 13).
