@@ -108,6 +108,12 @@ public class AutoMinFollowUpTests
         var root = new BoxNode(Column, app);
         FlexLayout.Layout(root, new Size(120, 40));
 
+        // One untimed change first and a collection, so the timing is of the
+        // relayout and not of the JIT or of the garbage building the tree left.
+        words[^2].InvalidateLayout();
+        FlexLayout.Layout(root, new Size(120, 40));
+        GC.Collect();
+
         var before = words.Sum(w => w.Measures);
         words[^1].InvalidateLayout();
         var sw = Stopwatch.StartNew();
