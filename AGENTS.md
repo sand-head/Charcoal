@@ -150,7 +150,8 @@ careful person writes it by hand, and match the idiom of the file you are in.
   exception from a restyle surfaces to the code that changed the sheet.
 - **Scroll anchoring corrects only for layout.** `AnchorScrollTop` records the
   offset the anchor was chosen at; if the offset changed since (wheel, key,
-  app code), the anchor is retired instead of undoing the scroll.
+  app code), the anchor is chosen again at the new offset before the next
+  layout, so the correction never undoes the scroll.
 - **Container queries** are re-evaluated after each layout and the layout
   repeats at most `MaxContainerPasses` (3) times.
 - **Sixel pictures are not bound to cells.** The painter blanks their cells

@@ -150,6 +150,25 @@ public class ScrollTests
     }
 
     [Fact]
+    public async Task A_scroll_to_the_end_and_a_new_line_in_the_same_frame_still_pin()
+    {
+        await using var running = new Running(setup: h => { h.Pinned = true; h.Lines = 12; });
+        running.Until(() => running.Box.ScrollTopMax == 2, "content taller than the box");
+
+        // Both land before the next layout, so the anchor must be chosen at
+        // the new offset from the old layout, as a browser does.
+        await running.App.InvokeAsync(() =>
+        {
+            running.Box.ScrollTop = running.Box.ScrollTopMax;
+            running.Component.Lines = 13;
+            running.Component.Refresh();
+        });
+
+        running.Until(() => running.Box.ScrollHeight == 13, "the layout to see 13 lines");
+        running.Until(() => running.Box.ScrollTop == 3, "the pin to follow the new line");
+    }
+
+    [Fact]
     public async Task Content_growing_above_the_view_does_not_shove_it_down()
     {
         // Anchoring's everyday job, and the reason the property exists: an

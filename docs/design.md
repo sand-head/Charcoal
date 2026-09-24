@@ -375,8 +375,10 @@ pass, because a terminal works in integers and the property set is small:
   containers. It records how far below the scrollport's top the anchor sits,
   and the next layout corrects `ScrollTop` by however far it moved.
   Anchoring only corrects for layout changes: `AnchorScrollTop` records the
-  offset the anchor was chosen at, and any scroll since then retires the
-  anchor, since otherwise the correction would undo the scroll. Pinning to
+  offset the anchor was chosen at, and before the next layout
+  `ReanchorScrolledBoxes` chooses again for any box scrolled since, from the
+  last layout moved by the scroll, as a browser does. The scroll is kept, and
+  content that grows in the same frame is still corrected for. Pinning to
   the bottom uses the web's stylesheet, with every child excluded and a
   sentinel at the end. A box that opens on a backlog still has
   to be scrolled to its end once, since anchoring keeps a position but does

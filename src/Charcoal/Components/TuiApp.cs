@@ -542,6 +542,7 @@ public sealed class TuiApp
             _ = _focus.FocusAsync(null);
         }
         var layoutStart = Stopwatch.GetTimestamp();
+        ReanchorScrolledBoxes();
         FlexLayout.Layout(_renderer.Root.Node, _size);
         if (_styles.UsesContainer)
         {
@@ -851,17 +852,42 @@ public sealed class TuiApp
     {
         foreach (var box in _renderer!.Root.Descendants().OfType<HostElement>().Where(e => e.IsScrollContainer))
         {
-            if (box.Node.Style.OverflowAnchor == OverflowAnchor.None)
-            {
-                box.AnchorNode = null;
-                continue;
-            }
-
-            var scrollport = box.Scrollport;
-            box.AnchorNode = SelectAnchor(box, scrollport);
-            box.AnchorOffset = box.AnchorNode is { } anchor ? anchor.Node.Layout.Y - scrollport.Y : 0;
-            box.AnchorScrollTop = box.ScrollTop;
+            RecordAnchor(box, 0);
         }
+    }
+
+    /// <summary>
+    /// Chooses the anchor again for each box scrolled since its anchor was
+    /// recorded, from the last layout moved by the scroll, as a browser does
+    /// before the next layout. Content that grows in the same frame as the
+    /// scroll is then corrected for, and the scroll itself is kept.
+    /// </summary>
+    private void ReanchorScrolledBoxes()
+    {
+        foreach (var box in _renderer!.Root.Descendants().OfType<HostElement>().Where(e => e.IsScrollContainer))
+        {
+            var scrolled = box.ScrollTop - box.AnchorScrollTop;
+            if (scrolled != 0) RecordAnchor(box, scrolled);
+        }
+    }
+
+    /// <summary>
+    /// Records a box's anchor node and how far below the scrollport's top it
+    /// sits, with the content moved up by <paramref name="scrolled"/> rows
+    /// the last layout has not applied yet.
+    /// </summary>
+    private static void RecordAnchor(HostElement box, int scrolled)
+    {
+        if (box.Node.Style.OverflowAnchor == OverflowAnchor.None)
+        {
+            box.AnchorNode = null;
+            return;
+        }
+
+        var scrollport = box.Scrollport.Offset(0, scrolled);
+        box.AnchorNode = SelectAnchor(box, scrollport);
+        box.AnchorOffset = box.AnchorNode is { } anchor ? anchor.Node.Layout.Y - scrollport.Y : 0;
+        box.AnchorScrollTop = box.ScrollTop;
     }
 
     /// <summary>
