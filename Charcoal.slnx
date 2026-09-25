@@ -7,6 +7,7 @@
     <Project Path="examples/Picker/Picker.csproj" />
     <Project Path="examples/Routing/Routing.csproj" />
     <Project Path="examples/Styled/Styled.csproj" />
+    <Project Path="examples/Todo/Todo.csproj" />
     <Project Path="examples/Transcript/Transcript.csproj" />
   </Folder>
   <Folder Name="/src/">

@@ -48,7 +48,7 @@ src/Charcoal/
   Routing/     TerminalNavigationManager
   build/       Charcoal.targets (embeds scoped CSS bundles; ships in the package)
 tests/Charcoal.Tests/   xunit, one folder per namespace
-examples/               runnable apps: Hello, Layouts, Styled, Counter, Picker, Form, Routing, Transcript;
+examples/               runnable apps: Hello, Layouts, Styled, Counter, Picker, Form, Routing, Todo, Transcript;
                         Web runs them in a browser (needs wasm-tools, so it is not in the solution)
 docs/design.md          the design and the reasons behind it
 ```

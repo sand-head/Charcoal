@@ -1,0 +1,10 @@
+<input id="done" type="checkbox" @bind="Done" autofocus />
+<div id="value">@Done</div>
+
+@code {
+    public static CheckableFixture? Last;
+
+    public bool Done { get; set; }
+
+    protected override void OnInitialized() => Last = this;
+}

@@ -64,6 +64,9 @@ public class TextControlTests
         Assert.True(Element("input").Focusable);
         Assert.True(Element("input").Tabbable);
         Assert.True(Element("textarea").Tabbable);
+        Assert.True(Element("button").Focusable);
+        Assert.True(Element("button").Tabbable);
+        Assert.False(Element("button", ("disabled", true)).Focusable);
         Assert.False(Element("input", ("disabled", true)).Focusable);
         Assert.True(Element("input", ("disabled", false)).Focusable);
         var clickOnly = Element("input", ("tabindex", -1));
@@ -223,6 +226,257 @@ public class TextControlTests
         Assert.False(control.TakeChange(out _));
         input.SetAttribute("value", "reset", 0);
         Assert.False(control.TakeChange(out _));
+    }
+
+    [Fact]
+    public void An_activation_input_paints_its_value_and_does_not_edit_text()
+    {
+        var button = Element("input", ("type", "button"), ("value", "save"));
+        var control = button.Control!;
+        Assert.Equal(new Size(8, 1), FlexLayout.Measure(button.Node, 80, null));
+        Assert.Equal("[ save ]", Painted(Laid(button, 10, 1)).RowText(0).TrimEnd());
+        Assert.False(control.HandleKey(Typed("x"), out _));
+        Assert.Equal("save", control.Value);
+    }
+
+    [Fact]
+    public void A_checkbox_is_a_small_leaf_toggled_by_space_or_a_click_and_shows_x_when_checked()
+    {
+        var box = Element("input", ("type", "checkbox"));
+        var control = box.Control!;
+        Assert.Equal(new Size(3, 1), FlexLayout.Measure(box.Node, 80, null));
+        Assert.Equal(3, FlexLayout.MinContentWidth(box.Node));
+        Assert.False(control.Checked);
+
+        Assert.False(control.HandleKey(Special(Key.Enter), out _));   // Enter is nobody's toggle
+        Assert.True(control.HandleKey(Typed(" "), out var edited));
+        Assert.True(edited);
+        Assert.True(control.Checked);
+        Assert.Equal("true", control.Value);
+
+        var body = Laid(box, 5, 1);
+        Assert.Equal("[x]", Painted(body).RowText(0).TrimEnd());
+
+        Assert.True(control.Click(0, 0));
+        Assert.False(control.Checked);
+        Assert.Equal("[ ]", Painted(body).RowText(0).TrimEnd());
+    }
+
+    [Fact]
+    public void The_checked_attribute_drives_a_checkbox_without_resetting_a_toggle_on_restyle()
+    {
+        var box = Element("input", ("type", "checkbox"), ("checked", true));
+        var control = box.Control!;
+        Assert.True(control.Checked);
+
+        box.SetAttribute("checked", false, 0);
+        Assert.False(control.Checked);
+        box.RemoveAttribute("checked");
+        Assert.False(control.Checked);
+        box.SetAttribute("checked", true, 0);
+        Assert.True(control.Checked);
+
+        // A restyle — focus moved, a sheet changed — leaves an interactive toggle alone.
+        control.HandleKey(Typed(" "), out _);
+        Assert.False(control.Checked);
+        box.Restyle();
+        Assert.False(control.Checked);
+    }
+
+    [Fact]
+    public void An_indeterminate_checkbox_shows_a_dash_and_any_toggle_clears_it()
+    {
+        var box = Element("input", ("type", "checkbox"), ("indeterminate", true));
+        var control = box.Control!;
+        Assert.True(control.Indeterminate);
+        Assert.Equal("[-]", Painted(Laid(box, 5, 1)).RowText(0).TrimEnd());
+
+        control.HandleKey(Typed(" "), out _);
+        Assert.False(control.Indeterminate);
+        Assert.True(control.Checked);
+    }
+
+    [Fact]
+    public void A_radio_group_keeps_one_checked_member_by_name_and_a_checked_radio_ignores_another_toggle()
+    {
+        var a = Element("input", ("type", "radio"), ("name", "size"), ("checked", true));
+        var b = Element("input", ("type", "radio"), ("name", "size"));
+        var other = Element("input", ("type", "radio"), ("name", "flavor"));
+        var body = new HostElement("body");
+        body.InsertChild(0, a);
+        body.InsertChild(1, b);
+        body.InsertChild(2, other);
+
+        Assert.True(a.Control!.Checked);
+        Assert.True(b.Control!.HandleKey(Typed(" "), out var edited));
+        Assert.True(edited);
+        Assert.True(b.Control.Checked);
+        Assert.False(a.Control.Checked);       // the same-named radio was cleared
+        Assert.False(other.Control!.Checked);  // a different name is untouched
+
+        // A checked radio button ignores another click or Space: nothing changes.
+        Assert.True(b.Control.HandleKey(Typed(" "), out edited));
+        Assert.False(edited);
+        Assert.True(b.Control.Checked);
+    }
+
+    [Fact]
+    public void A_checkbox_or_radios_onchange_commits_once_per_settled_toggle()
+    {
+        var box = Element("input", ("type", "checkbox"));
+        var control = box.Control!;
+        Assert.False(control.TakeChange(out _));
+        control.HandleKey(Typed(" "), out _);
+        Assert.True(control.TakeChange(out var value));
+        Assert.Equal("true", value);
+        Assert.False(control.TakeChange(out _));   // already committed
+        control.HandleKey(Typed(" "), out _);      // unchecked...
+        control.HandleKey(Typed(" "), out _);      // ...and checked again: back where it was committed
+        Assert.False(control.TakeChange(out _));
+    }
+
+    [Fact]
+    public void Checked_and_indeterminate_pseudo_classes_match_the_live_state_not_the_checked_attribute()
+    {
+        var checkedSelector = Selector.Parse(":checked");
+        var indeterminateSelector = Selector.Parse("input:indeterminate");
+        var box = Element("input", ("type", "checkbox"), ("checked", true));
+        Assert.True(checkedSelector.Matches(box, null));
+
+        box.Control!.HandleKey(Typed(" "), out _);
+        Assert.False(checkedSelector.Matches(box, null));   // the live state, not the [checked] attribute
+
+        box.SetAttribute("indeterminate", true, 0);
+        Assert.True(indeterminateSelector.Matches(box, null));
+    }
+
+    [Fact]
+    public void A_number_field_types_digits_a_leading_minus_and_one_dot_but_rejects_the_rest()
+    {
+        var control = Element("input", ("type", "number")).Control!;
+        Type(control, "-12.5x");
+        Assert.Equal("-12.5", control.Value);   // the letter is refused
+        Type(control, ".");
+        Assert.Equal("-12.5", control.Value);   // a second dot is refused
+        Assert.False(control.Paste("6a"));      // a paste that would not be a number is refused whole
+        Assert.Equal("-12.5", control.Value);
+        Assert.True(control.Paste("6"));
+        Assert.Equal("-12.56", control.Value);
+    }
+
+    [Fact]
+    public void ArrowUp_and_ArrowDown_step_a_number_by_step_and_clamp_to_min_and_max()
+    {
+        var control = Element("input", ("type", "number"), ("min", "0"), ("max", "10"), ("step", "5"), ("value", "8")).Control!;
+        Assert.Equal("8", control.Value);
+
+        Assert.True(control.HandleKey(Special(Key.Up), out var edited));
+        Assert.True(edited);
+        Assert.Equal("10", control.Value);   // 8 steps up to 13, which clamps to the max
+
+        Assert.True(control.HandleKey(Special(Key.Up), out edited));
+        Assert.False(edited);                // already at the max
+        Assert.Equal("10", control.Value);
+
+        Assert.True(control.HandleKey(Special(Key.Down), out edited));
+        Assert.True(edited);
+        Assert.Equal("5", control.Value);
+
+        control.HandleKey(Special(Key.Down), out _);
+        Assert.Equal("0", control.Value);
+        Assert.True(control.HandleKey(Special(Key.Down), out edited));
+        Assert.False(edited);                // already at the min
+    }
+
+    [Fact]
+    public void A_number_fields_left_right_home_and_end_still_move_the_caret_not_the_value()
+    {
+        var control = Element("input", ("type", "number"), ("value", "123")).Control!;
+        Assert.True(control.HandleKey(Special(Key.Home), out var edited));
+        Assert.False(edited);
+        Assert.Equal(0, control.Editor.Caret);
+        Assert.True(control.HandleKey(Special(Key.End), out edited));
+        Assert.False(edited);
+        Assert.Equal(3, control.Editor.Caret);
+        Assert.Equal("123", control.Value);
+    }
+
+    [Fact]
+    public void A_range_defaults_to_the_midpoint_and_paints_a_track_with_a_thumb_at_its_value()
+    {
+        var box = Element("input", ("type", "range"), ("size", "11"));
+        var control = box.Control!;
+        Assert.Equal(50, control.RangeValue);
+        Assert.Equal(new Size(11, 1), FlexLayout.Measure(box.Node, 80, null));
+
+        var body = Laid(box, 11, 1);
+        Assert.Equal("─────●─────", Painted(body).RowText(0));   // 50% of 11 cells: the thumb at column 5
+    }
+
+    [Fact]
+    public void Arrow_keys_and_home_end_step_a_ranges_value_and_a_click_positions_it_proportionally()
+    {
+        var box = Element("input", ("type", "range"), ("min", "0"), ("max", "10"), ("step", "2"), ("value", "4"), ("size", "11"));
+        var control = box.Control!;
+        Assert.Equal(4, control.RangeValue);
+
+        Assert.True(control.HandleKey(Special(Key.Right), out var edited));
+        Assert.True(edited);
+        Assert.Equal(6, control.RangeValue);
+
+        control.HandleKey(Special(Key.Up), out _);
+        Assert.Equal(8, control.RangeValue);   // Up steps the same way as Right
+
+        Assert.True(control.HandleKey(Special(Key.Left), out edited));
+        Assert.True(edited);
+        Assert.Equal(6, control.RangeValue);
+
+        control.HandleKey(Special(Key.Home), out _);
+        Assert.Equal(0, control.RangeValue);
+        control.HandleKey(Special(Key.End), out _);
+        Assert.Equal(10, control.RangeValue);
+        Assert.True(control.HandleKey(Special(Key.End), out edited));
+        Assert.False(edited);                  // already at the max
+
+        Laid(box, 11, 1);
+        Assert.True(control.Click(0, 0));
+        Assert.Equal(0, control.RangeValue);   // a click at the far left is the minimum
+    }
+
+    [Fact]
+    public void A_ranges_value_attribute_and_a_changed_bound_drive_it_without_resetting_a_drag_on_restyle()
+    {
+        var box = Element("input", ("type", "range"), ("min", "0"), ("max", "10"), ("value", "7"));
+        var control = box.Control!;
+        Assert.Equal(7, control.RangeValue);
+
+        box.SetAttribute("max", "5", 0);       // narrowing the bound re-clamps the current value
+        Assert.Equal(5, control.RangeValue);
+
+        control.HandleKey(Special(Key.Left), out _);
+        Assert.Equal(4, control.RangeValue);
+
+        // A restyle leaves an interactive drag alone, as it does for typed text.
+        box.Restyle();
+        Assert.Equal(4, control.RangeValue);
+    }
+
+    [Fact]
+    public void A_number_and_a_ranges_onchange_commit_once_per_settled_value()
+    {
+        var number = Element("input", ("type", "number"), ("value", "1")).Control!;
+        Assert.False(number.TakeChange(out _));
+        number.HandleKey(Special(Key.Up), out _);
+        Assert.True(number.TakeChange(out var value));
+        Assert.Equal("2", value);
+        Assert.False(number.TakeChange(out _));
+
+        var range = Element("input", ("type", "range"), ("value", "5")).Control!;
+        Assert.False(range.TakeChange(out _));
+        range.HandleKey(Special(Key.Right), out _);
+        Assert.True(range.TakeChange(out value));
+        Assert.Equal("6", value);
+        Assert.False(range.TakeChange(out _));
     }
 
     [Fact]

@@ -203,6 +203,7 @@ public sealed class HostElement : HostNode
         IsImage = Name == "img";
         IsCanvas = Name == "canvas";
         IsControl = Name is "input" or "textarea";
+        IsButton = Name == "button";
         IsAnchor = Name == "a";
         Node = ElementLayoutNode.For(this);
         _styles = styles;
@@ -238,6 +239,9 @@ public sealed class HostElement : HostNode
 
     /// <summary>Whether this is an <c>&lt;input&gt;</c> or a <c>&lt;textarea&gt;</c>.</summary>
     public bool IsControl { get; }
+
+    /// <summary>Whether this is a <c>&lt;button&gt;</c>.</summary>
+    public bool IsButton { get; }
 
     /// <summary>Whether this is an <c>&lt;a&gt;</c>, which is only a link when it has an <see cref="Href"/>.</summary>
     public bool IsAnchor { get; }
@@ -496,7 +500,7 @@ public sealed class HostElement : HostNode
         var tabIndex = _attributes.TryGetValue("tabindex", out var tab) ? ParseTabIndex(tab) : null;
         Href = IsAnchor && _attributes.TryGetValue("href", out var href) ? href?.ToString() : null;
         // Links and enabled form controls are focusable and tabbable without a tabindex.
-        var enabledControl = IsControl && _attributes.GetValueOrDefault("disabled") is null or false;
+        var enabledControl = (IsControl || IsButton) && (_attributes.GetValueOrDefault("disabled") is null or false);
         var interactive = enabledControl || IsLink;
         Focusable = tabIndex is not null || interactive;
         Tabbable = tabIndex is >= 0 || (interactive && tabIndex is null);

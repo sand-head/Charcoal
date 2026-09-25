@@ -94,11 +94,13 @@ public static class EventHandlers
 
 /// <summary>
 /// <c>@bind</c> on form controls, as <c>Microsoft.AspNetCore.Components.Web</c>
-/// declares it for the DOM: <c>value</c> carries the text in and
-/// <c>onchange</c> carries it out.
+/// declares it for the DOM: <c>value</c> or, for a checkbox or radio button,
+/// <c>checked</c> carries the state in and <c>onchange</c> carries it out.
 /// </summary>
 [BindElement("input", null, "value", "onchange")]
 [BindElement("textarea", null, "value", "onchange")]
+[BindElement("input", "checkbox", "checked", "onchange")]
+[BindElement("input", "radio", "checked", "onchange")]
 public static class BindAttributes
 {
 }

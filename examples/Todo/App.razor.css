@@ -1,0 +1,23 @@
+.app { display: flex; flex-direction: column; gap: 1; padding: 1 2; height: 100%; overflow: auto }
+header { display: flex; flex-direction: column }
+.title { color: cyan; font-weight: bold }
+.help, footer, .when, .notes { opacity: 0.5 }
+.composer { display: flex; flex-direction: column; gap: 1; border: solid; padding: 1 }
+label { display: flex; flex-direction: column; gap: 0 }
+.details { display: flex; gap: 2; flex-wrap: wrap }
+input, textarea { border: solid; padding: 0 1; width: fit-content }
+input:focus, textarea:focus, button:focus { border-color: cyan }
+input[type="checkbox"] { width: fit-content }
+input[type="range"] { width: 20 }
+button { border: solid; padding: 0 1; width: fit-content }
+.filters { display: flex; gap: 1; flex-wrap: wrap }
+.filters .selected { color: cyan; font-weight: bold }
+.tasks { display: flex; flex-direction: column; gap: 1 }
+.task { display: flex; gap: 1; border-left: solid cyan; padding: 0 1 }
+.task-body { flex-grow: 1 }
+.task-title { font-weight: bold }
+.task.completed { border-left-color: green }
+.task.completed .task-title { opacity: 0.5; text-decoration: line-through }
+.priority { color: yellow }
+.remove { color: red; height: 1 }
+.empty { opacity: 0.5; font-style: italic }
