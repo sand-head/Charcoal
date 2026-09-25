@@ -1,0 +1,15 @@
+.app {
+    display: flex;
+    flex-direction: column;
+    gap: 1;
+    padding: 1 2;
+}
+
+.title {
+    opacity: 0.5;
+}
+
+.clock {
+    color: green;
+    font-weight: bold;
+}

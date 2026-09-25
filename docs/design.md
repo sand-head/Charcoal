@@ -523,6 +523,12 @@ else, use `Run`. On such a host a timer's `InvokeAsync` runs inline, outside
 any step, so it is not queued work that would wake the loop. Every applied
 render batch therefore releases the loop's signal too.
 
+`services.AddCharcoal<TRoot>()` connects an app to Microsoft's generic host.
+It uses the host's service provider for component injection and runs `Run` on
+a dedicated thread, leaving host startup unblocked. Host shutdown calls
+`TuiApp.Exit()`, and an app exit asks the host to stop, so the terminal is
+restored before host-owned services are disposed.
+
 `examples/Web` runs the other examples that way, drawn by the slopterm
 emulator in the same WebAssembly process. It needs the `wasm-tools`
 workload, so it is not in `Charcoal.slnx`.

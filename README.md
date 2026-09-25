@@ -86,6 +86,35 @@ Add an `_Imports.razor`:
 return new TuiApp().Run<App>();
 ```
 
+### Generic host
+
+For configuration, logging, hosted services and the usual Microsoft dependency
+injection container, add the generic-host package to the app:
+
+```xml
+<PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.*" />
+```
+
+Then register Charcoal and the services components inject. The app runs as a
+hosted service; `Run` owns a dedicated thread for the terminal loop, an app
+exit stops the host, and host shutdown exits the app.
+
+```csharp
+using Charcoal.Components;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+
+var builder = Host.CreateApplicationBuilder(args);
+builder.Services.AddSingleton<WeatherService>();
+builder.Services.AddCharcoal<App>();
+return builder.Build().Run();
+```
+
+`AddCharcoal<App>(options)` accepts a `TuiAppOptions` to configure the app.
+It uses `ConsoleTerminal` by default; register an `ITerminal` before calling
+it to replace the terminal, for example in a test. See `examples/Hosting`
+for a runnable app.
+
 ## Elements
 
 Write the HTML tags you already use: `div`, `p`, `span`, `strong`, `em`,
