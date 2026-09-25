@@ -3,6 +3,7 @@
     <Project Path="examples/Counter/Counter.csproj" />
     <Project Path="examples/Form/Form.csproj" />
     <Project Path="examples/Hello/Hello.csproj" />
+    <Project Path="examples/Hosting/Hosting.csproj" />
     <Project Path="examples/Layouts/Layouts.csproj" />
     <Project Path="examples/Picker/Picker.csproj" />
     <Project Path="examples/Routing/Routing.csproj" />

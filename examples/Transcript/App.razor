@@ -9,7 +9,7 @@
 <div class="app" @onkeydown="OnKey">
     <div class="bar">
         <span class="name">transcript</span>
-        <span class="muted">@_lines.Count lines · @(_streaming ? "streaming" : "paused") · F1 pauses · Enter sends · Ctrl+C quits</span>
+        <span class="muted">@_lines.Count lines · @(_streaming ? "streaming" : "paused") · F1 pauses · Enter sends · @(QuitConfirming ? "Ctrl+C again quits" : "Ctrl+C quits")</span>
     </div>
 
     @* The newest line sits at the bottom, just above the composer. *@
@@ -40,6 +40,9 @@
     private bool _streaming;
     private Timer? _timer;
     private int _wordsLeft;
+    private DateTime _quitAsked;
+
+    private bool QuitConfirming => (DateTime.UtcNow - _quitAsked).TotalSeconds < 2;
 
     private static readonly string[] Words =
         "the quick brown fox jumps over the lazy dog while a component tree of ten thousand lines stays cheap because only what changed is measured painted and flushed".Split(' ');
@@ -95,6 +98,21 @@
 
     private void OnKey(KeyboardEventArgs e)
     {
+        // With text selected, Ctrl+C keeps its default action and copies.
+        if (e.Key.IsCtrl('c') && !Tui.Selection.Active)
+        {
+            if (QuitConfirming)
+            {
+                Tui.Exit();
+            }
+            else
+            {
+                _quitAsked = DateTime.UtcNow;
+            }
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key.Key != Key.F1) return;
 
         if (_streaming)

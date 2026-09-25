@@ -1,0 +1,16 @@
+@inject Clock ClockService
+@inject TuiApp Tui
+
+<div class="app" @onkeydown="OnKey">
+    <div class="title">generic host · time from an injected service · q quits</div>
+    <div class="clock">@ClockService.Now.ToString("HH:mm:ss")</div>
+</div>
+
+@code {
+    private void OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key.Text != "q") return;
+        Tui.Exit();
+        e.Handled = true;
+    }
+}

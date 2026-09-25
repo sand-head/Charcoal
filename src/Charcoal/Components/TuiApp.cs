@@ -296,9 +296,12 @@ public sealed class TuiApp
         Run(typeof(TRoot), parameters);
 
     /// <inheritdoc cref="Run{TRoot}"/>
-    public int Run(Type rootComponent, IReadOnlyDictionary<string, object?>? parameters = null)
+    public int Run(Type rootComponent, IReadOnlyDictionary<string, object?>? parameters = null) =>
+        Run(rootComponent, parameters, null);
+
+    internal int Run(Type rootComponent, IReadOnlyDictionary<string, object?>? parameters, IServiceProvider? services)
     {
-        var provider = Prepare();
+        var provider = Prepare(services, out var ownsProvider);
         try
         {
             Launch(rootComponent, parameters);
@@ -309,7 +312,7 @@ public sealed class TuiApp
         }
         finally
         {
-            TearDown(provider);
+            TearDown(provider, ownsProvider);
         }
         return ExitCode();
     }
@@ -329,7 +332,7 @@ public sealed class TuiApp
     /// <inheritdoc cref="RunAsync{TRoot}"/>
     public async Task<int> RunAsync(Type rootComponent, IReadOnlyDictionary<string, object?>? parameters = null)
     {
-        var provider = Prepare();
+        var provider = Prepare(null, out var ownsProvider);
         try
         {
             Launch(rootComponent, parameters);
@@ -340,17 +343,18 @@ public sealed class TuiApp
         }
         finally
         {
-            TearDown(provider);
+            TearDown(provider, ownsProvider);
         }
         return ExitCode();
     }
 
     /// <summary>Builds the services, the renderer and focus, and subscribes to the terminal.</summary>
-    private ServiceProvider Prepare()
+    private IServiceProvider Prepare(IServiceProvider? services, out bool ownsProvider)
     {
         _dispatcher.BindToCurrentThread();
         if (ScopedStylesheets) LoadScopedStylesheets();
-        var provider = Services.BuildServiceProvider();
+        var provider = services ?? Services.BuildServiceProvider();
+        ownsProvider = services is null;
         _navigation = provider.GetRequiredService<TerminalNavigationManager>();
         // Navigation from outside a component re-renders without marking the tree dirty.
         _navigation.LocationChanged += (_, _) => Invalidate();
@@ -401,7 +405,7 @@ public sealed class TuiApp
         if (render.IsFaulted) throw render.Exception!.GetBaseException();
     }
 
-    private void TearDown(ServiceProvider provider)
+    private void TearDown(IServiceProvider provider, bool ownsProvider)
     {
         _styles.Sheets.Changed -= OnStylesheetsChanged;
         var release = Graphics.ReleaseAll();
@@ -410,7 +414,7 @@ public sealed class TuiApp
         _terminal.InputReceived -= _pump.Enqueue;
         _terminal.Resized -= OnResized;
         _renderer?.Dispose();
-        provider.Dispose();
+        if (ownsProvider && provider is IDisposable disposable) disposable.Dispose();
     }
 
     private int ExitCode()
