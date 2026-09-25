@@ -43,6 +43,8 @@ public enum PseudoClass
     Disabled = 32,
     Enabled = 64,
     PlaceholderShown = 128,
+    Checked = 256,
+    Indeterminate = 512,
 }
 
 /// <summary>
@@ -87,6 +89,8 @@ public sealed record CompoundSelector(
         if (Has(PseudoClass.Disabled) && !IsDisabled(element)) return false;
         if (Has(PseudoClass.Enabled) && (!IsFormControl(element) || IsDisabled(element))) return false;
         if (Has(PseudoClass.PlaceholderShown) && element.Control is not { PlaceholderShown: true }) return false;
+        if (Has(PseudoClass.Checked) && element.Control is not { Checked: true }) return false;
+        if (Has(PseudoClass.Indeterminate) && element.Control is not { Indeterminate: true }) return false;
         return true;
     }
 
@@ -148,6 +152,8 @@ public sealed record CompoundSelector(
         if (Has(PseudoClass.Disabled)) text.Append(":disabled");
         if (Has(PseudoClass.Enabled)) text.Append(":enabled");
         if (Has(PseudoClass.PlaceholderShown)) text.Append(":placeholder-shown");
+        if (Has(PseudoClass.Checked)) text.Append(":checked");
+        if (Has(PseudoClass.Indeterminate)) text.Append(":indeterminate");
         return text.Length == 0 ? "*" : text.ToString();
     }
 }
@@ -239,6 +245,8 @@ public sealed class Selector
             ["disabled"] = PseudoClass.Disabled,
             ["enabled"] = PseudoClass.Enabled,
             ["placeholder-shown"] = PseudoClass.PlaceholderShown,
+            ["checked"] = PseudoClass.Checked,
+            ["indeterminate"] = PseudoClass.Indeterminate,
         };
 
         private int _position;

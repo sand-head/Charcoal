@@ -475,13 +475,14 @@ public sealed class TuiApp
     /// <summary>Raises <c>onchange</c> if the field's value changed since it was last committed.</summary>
     private async Task CommitAsync(HostElement element)
     {
-        if (element.Control is not { } control || !control.TakeChange(out var value)) return;
+        if (element.Control is not { } control || !control.TakeChange(out _)) return;
+        var value = control.FieldValue;
         await _renderer!.RaiseAsync(element, "onchange", new ChangeEventArgs { Value = value }, value);
     }
 
     private Task InputAsync(HostElement element)
     {
-        var value = element.Control!.Value;
+        var value = element.Control!.FieldValue;
         return _renderer!.RaiseAsync(element, "oninput", new ChangeEventArgs { Value = value }, value);
     }
 
@@ -667,6 +668,12 @@ public sealed class TuiApp
         await BubbleAsync(_focus!.Focused, "onkeydown", args, () => args.Handled);
         if (args.Handled) return;
 
+        if ((key.Key is Key.Enter or Key.Space) && !key.Ctrl && !key.Alt && _focus.Focused is { Control: { IsActivation: true } } inputButton)
+        {
+            await ActivateAsync(inputButton);
+            return;
+        }
+
         // Fields edit with the keys the handlers left. Enter in an input
         // commits its value first.
         if (_focus.Focused is { Control: { } control } field)
@@ -678,7 +685,11 @@ public sealed class TuiApp
             if (control.HandleKey(key, out var edited))
             {
                 _renderer!.Dirty = true;
-                if (edited) await InputAsync(field);
+                if (edited)
+                {
+                    await InputAsync(field);
+                    if (control.CommitsOnEdit) await CommitAsync(field);
+                }
                 return;
             }
         }
@@ -686,6 +697,12 @@ public sealed class TuiApp
         if (key.Key == Key.Enter && !key.Ctrl && !key.Alt && _focus.Focused is { IsLink: true } link)
         {
             Follow(link);
+            return;
+        }
+
+        if ((key.Key is Key.Enter or Key.Space) && !key.Ctrl && !key.Alt && _focus.Focused is { IsButton: true } button)
+        {
+            await ActivateAsync(button);
             return;
         }
 
@@ -719,6 +736,13 @@ public sealed class TuiApp
             return;
         }
         if (_options.ExitOnCtrlC && key.IsCtrl('c')) Exit();
+    }
+
+    /// <summary>Dispatches the click a keyboard activation supplies.</summary>
+    private Task ActivateAsync(HostElement element)
+    {
+        var click = new MouseEventArgs(new MouseEvent(MouseAction.Pressed, MouseButton.Left, element.Node.Layout.X, element.Node.Layout.Y, KeyModifiers.None), element);
+        return BubbleAsync(element, "onclick", click, () => click.Handled);
     }
 
     /// <summary>
@@ -1077,6 +1101,8 @@ public sealed class TuiApp
         if (leftPress && target.Control is { } control && control.Click(mouse.X, mouse.Y))
         {
             _renderer.Dirty = true;
+            await InputAsync(target);
+            if (control.CommitsOnEdit) await CommitAsync(target);
         }
         Select(mouse, target);
     }

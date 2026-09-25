@@ -26,6 +26,8 @@ public sealed class EmulatorTerminal : ITerminal
     public Size Size => new(_emulator.Cols, _emulator.Rows);
 
     /// <inheritdoc/>
+    // SlopTerm 1.2 answers Charcoal's Kitty and cell-pixel queries, so the
+    // interactive host enables image placement as it does in a real terminal.
     public bool IsInteractive => true;
 
     /// <inheritdoc/>

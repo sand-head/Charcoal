@@ -22,7 +22,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.12" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.12" PrivateAssets="all" />
-    <PackageReference Include="SlopTerm.Blazor" Version="1.1.8" />
+    <PackageReference Include="SlopTerm.Blazor" Version="1.2.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -34,6 +34,7 @@
     <ProjectReference Include="../Picker/Picker.csproj" />
     <ProjectReference Include="../Routing/Routing.csproj" />
     <ProjectReference Include="../Styled/Styled.csproj" />
+    <ProjectReference Include="../Todo/Todo.csproj" />
     <ProjectReference Include="../Transcript/Transcript.csproj" />
   </ItemGroup>
 

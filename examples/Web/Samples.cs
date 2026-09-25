@@ -16,6 +16,7 @@ public static class Samples
         new("Picker", "A list for the keyboard or the mouse. ↑ ↓ and Enter, or click.", typeof(Picker.App)),
         new("Form", "input and textarea with @bind. Type, and Tab between fields.", typeof(Form.App)),
         new("Routing", "Blazor's Router with a route parameter. Tab and Enter follow a link.", typeof(Routing.App)),
+        new("Todo", "A task and reminder app with due times, priority, filters and completion.", typeof(Todo.App)),
         new("Transcript", "Two thousand lines, streaming, with a composer. F1 pauses.", typeof(Transcript.App)),
     ];
 }

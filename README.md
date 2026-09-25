@@ -172,14 +172,28 @@ element, `caret="col,row"` places it.
 
 `<input>` and `<textarea>` edit text on their own: a caret on grapheme
 boundaries, readline keys (word jumps, Ctrl+A/E, Ctrl+U/K/W, Alt+D), paste,
-click to place the caret, and soft-wrapped lines in a textarea.
+click to place the caret, and soft-wrapped lines in a textarea. `text`,
+`search`, `password`, `email`, `tel`, `url`, `date`, `time`,
+`datetime-local`, `month` and `week` are text fields; temporal values use
+normal ISO text because terminals have no calendar popup.
+
+`type="number"` accepts decimal text and ArrowUp/ArrowDown steps by `step`,
+within `min` and `max`. `type="range"` is a terminal slider: arrows step it,
+Home and End choose its bounds, and a click positions its thumb. Checkboxes
+and radios paint their normal glyphs, toggle with Space or a click, expose
+`:checked` and `:indeterminate`, and support `@bind` to a `bool`. Radios with
+the same `name` are one document-wide group; Charcoal has no form scoping.
 
 `@bind` and `@bind:event="oninput"` work as on the web, as do `value`,
-`placeholder`, `type="password"`, `disabled`, `readonly`, `maxlength`, `size`,
-`rows`, `cols`, `wrap="off"` and `autofocus`.
+`checked`, `placeholder`, `disabled`, `readonly`, `min`, `max`, `step`,
+`maxlength`, `size`, `rows`, `cols`, `wrap="off"` and `autofocus`. A
+`<button>` and `input` types `button`, `submit` and `reset` are tabbable and
+fire `@onclick` on Enter, Space or a click. `submit` and `reset` have no
+special action because Charcoal does not yet
+implement form submission or reset.
 
-Your `@onkeydown` sees each key before the field does. Take Enter for submit
-or Up for history and the field will not use them.
+Your `@onkeydown` sees each key before the control does. Take Enter for submit
+or Up for history and the control will not use it.
 
 ## Scrolling
 
@@ -289,6 +303,7 @@ Each directory under `examples/` is a runnable project.
 | `Picker` | A list with keyboard and mouse selection |
 | `Form` | `input` and `textarea` with `@bind`, Tab between fields |
 | `Routing` | Four pages, a nav bar and a route parameter |
+| `Todo` | A task and reminder app: completion, due times, reminder lead, priority, notes and filters |
 | `Transcript` | A streaming transcript with a composer; `--bench` prints frame costs |
 | `Web` | All of the above in a browser, through `TuiApp.RunAsync` and the [slopterm](https://git.sand.town/sand_head/slopterm) emulator |
 
@@ -325,6 +340,8 @@ The design and the reasons behind it are in [docs/design.md](docs/design.md).
 - Clicking an inline element: hit-testing stops at the block, so a link in a
   flex nav bar is clickable but one inside a paragraph is Tab and Enter only
 - List markers — `li` stacks but does not bullet
+- File and image inputs, form submission and form reset
+- Calendar, clock and colour-picker popovers; temporal values are editable ISO text
 - `margin: auto` centring, `!important`, pseudo-elements
 - OSC 8 terminal hyperlinks for external links
 - `#fragment` matches a route but scrolls nothing

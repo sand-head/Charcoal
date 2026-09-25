@@ -20,7 +20,7 @@ public static class UserAgentStylesheet
 
         input, textarea { width: fit-content }
         input[type="hidden"] { display: none }
-        input:disabled, textarea:disabled { opacity: 0.5 }
+        input:disabled, textarea:disabled, button:disabled { opacity: 0.5 }
 
         h1, h2, h3, h4, h5, h6, strong, b, th { font-weight: bold }
         em, i, cite, dfn, var, address { font-style: italic }

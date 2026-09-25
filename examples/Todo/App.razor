@@ -1,0 +1,136 @@
+@inject TuiApp Tui
+
+<div class="app" @onkeydown="OnKey">
+    <header>
+        <div class="title">tasks & reminders</div>
+        <div class="help">Tab between controls · Space checks a task · Enter activates buttons · q quits</div>
+    </header>
+
+    <section class="composer">
+        <label for="title">new task</label>
+        <input id="title" @bind="_draft.Title" @bind:event="oninput" placeholder="What needs doing?" autofocus />
+
+        <div class="details">
+            <label>due <input type="date" @bind="_draft.Date" /></label>
+            <label>at <input type="time" @bind="_draft.Time" /></label>
+            <label>remind <input type="number" min="0" max="10080" step="5" @bind="_draft.RemindMinutes" /> min before</label>
+        </div>
+
+        <label>priority <input type="range" min="1" max="5" step="1" @bind="_draft.Priority" /> @_draft.Priority</label>
+        <label>notes <textarea rows="2" cols="48" @bind="_draft.Notes" placeholder="Optional context"></textarea></label>
+        <button @onclick="Add">add task</button>
+    </section>
+
+    <nav class="filters" aria-label="Task filter">
+        <button class="@FilterClass(Filter.All)" @onclick="() => _filter = Filter.All">all (@_tasks.Count)</button>
+        <button class="@FilterClass(Filter.Open)" @onclick="() => _filter = Filter.Open">open (@OpenCount)</button>
+        <button class="@FilterClass(Filter.Done)" @onclick="() => _filter = Filter.Done">done (@DoneCount)</button>
+        <button @onclick="ClearCompleted" disabled="@(DoneCount == 0)">clear completed</button>
+    </nav>
+
+    <main class="tasks">
+        @foreach (var task in VisibleTasks)
+        {
+            <article class="@TaskClass(task)" @key="task.Id">
+                <input type="checkbox" @bind="task.Completed" aria-label="Mark @task.Title complete" />
+                <div class="task-body">
+                    <div class="task-title">@task.Title</div>
+                    @if (task.Date.Length > 0)
+                    {
+                        <div class="when">@DueText(task)</div>
+                    }
+                    @if (task.Notes.Length > 0)
+                    {
+                        <div class="notes">@task.Notes</div>
+                    }
+                </div>
+                <div class="priority" aria-label="Priority @task.Priority">@Priority(task.Priority)</div>
+                <button class="remove" @onclick="() => Remove(task)">remove</button>
+            </article>
+        }
+        @if (!VisibleTasks.Any())
+        {
+            <div class="empty">Nothing here. Add a task above.</div>
+        }
+    </main>
+
+    <footer>@OpenCount open · @DoneCount completed · @ReminderCount reminders scheduled</footer>
+</div>
+
+@code {
+    private readonly List<TaskItem> _tasks =
+    [
+        new("Plan the week", "2026-09-25", "09:00", 30, 3, "Review commitments before the morning stand-up."),
+        new("Reply to Maya", "2026-09-24", "15:30", 15, 4, "Send the prototype notes."),
+        new("Take a walk", "", "", 0, 1, "", true),
+    ];
+    private Draft _draft = new();
+    private Filter _filter;
+
+    private IEnumerable<TaskItem> VisibleTasks => _tasks.Where(task => _filter switch
+    {
+        Filter.Open => !task.Completed,
+        Filter.Done => task.Completed,
+        _ => true,
+    });
+
+    private int OpenCount => _tasks.Count(task => !task.Completed);
+    private int DoneCount => _tasks.Count(task => task.Completed);
+    private int ReminderCount => _tasks.Count(task => !task.Completed && task.Date.Length > 0 && task.RemindMinutes > 0);
+
+    private void OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key.Text != "q" || Tui.Focus.Focused?.Name is "input" or "textarea") return;
+        Tui.Exit();
+        e.Handled = true;
+    }
+
+    private void Add()
+    {
+        var title = _draft.Title.Trim();
+        if (title.Length == 0) return;
+
+        _tasks.Add(new TaskItem(title, _draft.Date, _draft.Time, _draft.RemindMinutes, _draft.Priority, _draft.Notes.Trim()));
+        _draft = new Draft();
+    }
+
+    private void Remove(TaskItem task) => _tasks.Remove(task);
+
+    private void ClearCompleted() => _tasks.RemoveAll(task => task.Completed);
+
+    private string FilterClass(Filter filter) => _filter == filter ? "selected" : "";
+
+    private static string TaskClass(TaskItem task) => task.Completed ? "task completed" : "task";
+
+    private static string DueText(TaskItem task)
+    {
+        var reminder = task.RemindMinutes > 0 ? $" · remind {task.RemindMinutes} min before" : "";
+        return task.Time.Length == 0 ? $"due {task.Date}{reminder}" : $"due {task.Date} at {task.Time}{reminder}";
+    }
+
+    private static string Priority(int priority) => new('●', priority) + new('·', 5 - priority);
+
+    private enum Filter { All, Open, Done }
+
+    private sealed class Draft
+    {
+        public string Title { get; set; } = "";
+        public string Date { get; set; } = "";
+        public string Time { get; set; } = "";
+        public int RemindMinutes { get; set; } = 15;
+        public int Priority { get; set; } = 3;
+        public string Notes { get; set; } = "";
+    }
+
+    private sealed class TaskItem(string title, string date, string time, int remindMinutes, int priority, string notes, bool completed = false)
+    {
+        public Guid Id { get; } = Guid.NewGuid();
+        public string Title { get; } = title;
+        public string Date { get; } = date;
+        public string Time { get; } = time;
+        public int RemindMinutes { get; } = remindMinutes;
+        public int Priority { get; } = priority;
+        public string Notes { get; } = notes;
+        public bool Completed { get; set; } = completed;
+    }
+}

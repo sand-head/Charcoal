@@ -1,0 +1,10 @@
+<input id="priority" type="range" min="1" max="5" @bind="Priority" autofocus />
+<div id="value">@Priority</div>
+
+@code {
+    public static RangeFixture? Last;
+
+    public int Priority { get; set; } = 3;
+
+    protected override void OnInitialized() => Last = this;
+}

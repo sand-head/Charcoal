@@ -163,27 +163,45 @@ keeps a picture on the last row from scrolling the screen, and mode 1070
 gives each picture its own colour registers. Encodings are cached per
 placement. iTerm2 inline images are not supported.
 
-**`input` and `textarea`** are leaves that edit text
-(`TextControlLayoutNode`). The editing model is `TextEditor`, which knows
+**`input` and `textarea`** are leaves with one stable
+`TextControlLayoutNode`; the `type` attribute chooses its behaviour without
+replacing the host node. Text-like controls use `TextEditor`, which knows
 nothing of the terminal. It keeps the caret on grapheme boundaries,
 implements readline's keys, and lays a textarea's text out in visual lines,
 breaking at newlines and after the last space that fits. Vertical moves keep
 their column, and clicks, the painted caret and Up and Down all use the same
 layout. An `input` replaces newlines with spaces, and a password field shows
-one bullet per cluster.
+one bullet per cluster. Date and time types remain ISO text fields: a
+terminal has no browser calendar or clock popup.
 
-The node reads the control's attributes. `value` replaces the text when the
-element first resolves and whenever the attribute changes, but not on a
-restyle, which would overwrite typed text. `placeholder` shows dimmed while
-the field is empty. `disabled` removes it from focus and the user-agent
-sheet dims it; `readonly` keeps the caret but refuses edits. `size`, `rows`
-and `cols` give the intrinsic size, 20×1 or 20×2, which the user-agent
-sheet's `width: fit-content` uses. A textarea's text content is its default
-value until the user edits it. The node paints its lines scrolled just
-enough to keep the caret visible and remembers the caret's cell for the
-terminal cursor. Enabled controls are focusable and tabbable without a
-`tabindex`, and `autofocus` takes focus when the element appears and nothing
-else has it. `:disabled`, `:enabled` and `:placeholder-shown` match them.
+A number field accepts decimal text and its Up and Down keys step by `step`
+within `min` and `max`. A range has a terminal track and thumb: arrows step,
+Home and End choose its bounds, and a click maps across its track. Checkboxes
+paint `[ ]`, `[x]` or `[-]`; radios paint `( )` or `(•)`. Space and a click
+run their default action, with a checked radio clearing each same-`name`
+radio in the document. A checkbox or range commits on every interaction;
+text fields still commit on Enter or blur. The live checked state is separate
+from the `checked` attribute, so restyling cannot undo a user toggle. It
+backs `:checked` and `:indeterminate`, and boolean `@bind` uses `checked`.
+
+The node reads the control's attributes. `value` and `checked` replace state
+when the element first resolves and whenever that attribute changes, but not
+on a restyle, which would overwrite a user edit. `placeholder` shows dimmed
+while a text field is empty. `disabled` removes it from focus and the
+user-agent sheet dims it; `readonly` keeps the caret but refuses text edits.
+`size`, `rows` and `cols` give a text field its intrinsic size, 20×1 or
+20×2, which the user-agent sheet's `width: fit-content` uses. A textarea's
+text content is its default value until the user edits it. The node paints
+text just scrolled enough to keep the caret visible and remembers the caret's
+cell for the terminal cursor. Enabled controls and buttons are focusable and
+tabbable without a `tabindex`, and `autofocus` takes focus when the element
+appears and nothing else has it. `:disabled`, `:enabled`,
+`:placeholder-shown`, `:checked` and `:indeterminate` match their live state.
+
+**`button`** and `input` types `button`, `submit` and `reset` have HTML's
+activation default: Enter, Space or a click dispatches `onclick`. `submit`
+and `reset` do not have a second default action yet because Charcoal does not
+implement the browser's form-submission model.
 
 **`canvas`** is a leaf painted by a delegate on the element (`Painter`). A
 component captures the element with `@ref` and sets the delegate after its

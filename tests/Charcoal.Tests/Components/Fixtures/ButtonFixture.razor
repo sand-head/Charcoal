@@ -1,0 +1,13 @@
+<button id="button" @onclick="Activate">activate</button>
+<input id="input-button" type="button" value="activate" @onclick="Activate" />
+<div id="count">@Count</div>
+
+@code {
+    public static ButtonFixture? Last;
+
+    public int Count { get; private set; }
+
+    protected override void OnInitialized() => Last = this;
+
+    private void Activate() => Count++;
+}
